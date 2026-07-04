@@ -1,10 +1,10 @@
+Top：该项目已废弃，开发到一半发现用obsidian插件组合就能完全满足这个需求
+
 # 🧠 Cognest
 
 Cognest 是一个 AI 认知工作台桌面应用，帮助用户将碎片化灵感演化为系统化认知。
 
 **核心理念：人在两端，AI 在中间** — 用户负责输入（碎片）和输出（文章），中间的整理、发现、归档、关联全部交给 AI。
-
-<img width="1000" alt="Cognest Preview" src="src/assets/hero.png" />
 
 ## 设计原则
 
