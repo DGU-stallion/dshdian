@@ -94,7 +94,7 @@ export class ModeManager extends Events {
 	}
 
 	/** Switch to a new mode — ends current session, creates new one */
-	async switchMode(mode: Mode): Promise<void> {
+	async switchMode(mode: Mode, vaultPath?: string): Promise<void> {
 		if (mode === this.currentMode && this.sessionId !== null) {
 			return;
 		}
@@ -102,10 +102,9 @@ export class ModeManager extends Events {
 		this.sessionId = null;
 		this.currentMode = mode;
 
-		// Start new session with mode-specific system prompt
-		const config = MODE_CONFIGS[mode];
+		// Start new session via DSH RPC (session.create)
 		try {
-			this.sessionId = await this.client.createSession(config.systemPrompt);
+			this.sessionId = await this.client.createSession(vaultPath);
 		} catch (e) {
 			// Session creation may fail if harness is down
 			console.warn("dshdian: failed to create session", e);

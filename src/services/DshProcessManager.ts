@@ -188,11 +188,11 @@ export class DshProcessManager extends Events {
 		this.trigger("stopped");
 	}
 
-	/** GET /health on the harness */
+	/** Check if DSH is responding (GET / returns 200) */
 	async healthCheck(): Promise<boolean> {
 		try {
 			const resp = await request({
-				url: `http://localhost:${this.port}/health`,
+				url: `http://localhost:${this.port}/`,
 				method: "GET",
 			});
 			if (resp) {

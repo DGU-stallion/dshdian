@@ -1,18 +1,16 @@
 import { requestUrl } from "obsidian";
 import type { ChatMessage, StreamEvent, StreamEventType } from "../types";
 
-/** Default request timeout in milliseconds */
-const REQUEST_TIMEOUT_MS = 30000;
-
 /**
- * HTTP + WebSocket client for communicating with the DSH Harness.
- * POST to send messages, WebSocket /api/events.mux to stream responses.
- * Falls back to SSE /api/events if WebSocket is unavailable.
+ * DSH Harness API client.
+ * Uses the actual DSH JSON-RPC protocol:
+ * - POST /api/session.create → create session
+ * - POST /api/session.prompt → send message
+ * - WebSocket /api/events.mux → streaming events
  */
 export class HarnessClient {
 	private port: number;
 	private ws: WebSocket | null = null;
-	private abortController: AbortController | null = null;
 	private eventHandler: ((event: StreamEvent) => void) | null = null;
 	private doneHandler: (() => void) | null = null;
 	private errorHandler: ((err: string) => void) | null = null;
@@ -33,41 +31,91 @@ export class HarnessClient {
 		return `ws://localhost:${this.port}`;
 	}
 
-	/** Create a new session, returns session ID */
-	async createSession(systemPrompt?: string): Promise<string> {
-		const body: Record<string, string> = {};
-		if (systemPrompt) {
-			body.system_prompt = systemPrompt;
-		}
-		const resp = await this.postWithTimeout(
-			`${this.baseUrl}/api/open`,
-			body
-		);
-		return resp.session_id ?? resp.sessionId ?? "";
-	}
-
-	/** Send a message to an existing session */
-	async sendMessage(
-		sessionId: string,
-		content: string,
-		context?: string
-	): Promise<void> {
-		const body: Record<string, string> = {
-			session_id: sessionId,
-			content,
-		};
-		if (context) {
-			body.context = context;
-		}
-		await this.postWithTimeout(`${this.baseUrl}/api/respond`, body);
+	/** Generate a unique RPC ID */
+	private rpcId(): string {
+		return crypto.randomUUID();
 	}
 
 	/**
-	 * Connect to the streaming endpoint for a session.
-	 * Tries WebSocket /api/events.mux first; falls back to SSE /api/events.
+	 * Call a DSH RPC method via POST /api/{method}
+	 * DSH protocol: { type: "client-request", rpcId, method, payload }
+	 * Response: { type: "server-response", rpcId, result: { ok, value } }
 	 */
-	streamResponse(
-		sessionId: string,
+	private async rpc<T>(method: string, payload: Record<string, unknown>): Promise<T> {
+		const rpcId = this.rpcId();
+		const body = {
+			type: "client-request",
+			rpcId,
+			method,
+			payload,
+		};
+
+		const resp = await requestUrl({
+			url: `${this.baseUrl}/api/${method}`,
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+
+		const data = resp.json;
+		if (!data.result?.ok) {
+			const errMsg = data.result?.error?.message ?? data.result?.error?.code ?? "RPC call failed";
+			throw new Error(`${method}: ${errMsg}`);
+		}
+		return data.result.value as T;
+	}
+
+	/** Create a new session, returns session ID */
+	async createSession(cwd?: string, agentPreset?: string): Promise<string> {
+		const payload: Record<string, unknown> = {};
+		if (cwd) payload.cwd = cwd;
+		if (agentPreset) payload.agentPreset = agentPreset;
+
+		const result = await this.rpc<{ sessionId: string; agentPreset?: string }>(
+			"session.create",
+			payload
+		);
+		return result.sessionId;
+	}
+
+	/** Send a message to an existing session */
+	async sendMessage(sessionId: string, content: string): Promise<void> {
+		await this.rpc<{ accepted: true }>("session.prompt", {
+			sessionId,
+			mode: "queue",
+			content: [{ type: "text", text: content }],
+		});
+	}
+
+	/** Get session history */
+	async getHistory(sessionId: string): Promise<unknown[]> {
+		const result = await this.rpc<{ events: unknown[]; hasMore: boolean }>(
+			"session.history",
+			{ sessionId }
+		);
+		return result.events;
+	}
+
+	/** List all sessions */
+	async listSessions(): Promise<Array<{ sessionId: string; updatedAt: number; blank: boolean }>> {
+		const result = await this.rpc<{ items: Array<{ sessionId: string; updatedAt: number; blank: boolean }> }>(
+			"session.list",
+			{}
+		);
+		return result.items;
+	}
+
+	/** Cancel (stop) a running session */
+	async cancelSession(sessionId: string): Promise<void> {
+		await this.rpc<{ accepted: true }>("session.cancel", { sessionId });
+	}
+
+	/**
+	 * Connect to the mux event stream via WebSocket.
+	 * DSH sends JSON frames: { type: "server-request", rpcId, payload: { ... } }
+	 * Payload contains session events (message chunks, tool calls, etc.)
+	 */
+	connectMux(
 		onEvent: (event: StreamEvent) => void,
 		onDone: () => void,
 		onError: (err: string) => void
@@ -76,161 +124,94 @@ export class HarnessClient {
 		this.doneHandler = onDone;
 		this.errorHandler = onError;
 
-		// Try WebSocket first
-		this.connectWebSocket(sessionId);
-	}
-
-	/** Connect via WebSocket to /api/events.mux */
-	private connectWebSocket(sessionId: string): void {
-		const url = `${this.wsUrl}/api/events.mux?session_id=${encodeURIComponent(sessionId)}`;
+		const url = `${this.wsUrl}/api/events.mux`;
 
 		try {
 			this.ws = new WebSocket(url);
-		} catch {
-			// WebSocket constructor may throw if URL is invalid
-			this.fallbackToSse(sessionId);
+		} catch (e) {
+			onError("Failed to connect WebSocket: " + String(e));
 			return;
 		}
 
-		this.ws.onopen = () => {
-			// Connection established
-		};
-
 		this.ws.onmessage = (event: MessageEvent) => {
-			this.handleStreamData(String(event.data));
+			this.handleMuxFrame(String(event.data));
 		};
 
 		this.ws.onerror = () => {
-			// WebSocket failed, fallback to SSE
-			this.ws = null;
-			this.fallbackToSse(sessionId);
+			this.errorHandler?.("WebSocket connection error");
 		};
 
 		this.ws.onclose = (event: CloseEvent) => {
 			this.ws = null;
-			// Normal close (code 1000) means stream completed
 			if (event.code === 1000 || event.wasClean) {
 				this.doneHandler?.();
 			}
-			// Abnormal close without prior error — already handled in onerror
 		};
 	}
 
-	/** Fallback: connect via SSE to /api/events */
-	private fallbackToSse(sessionId: string): void {
-		this.abortController = new AbortController();
-		const url = `${this.baseUrl}/api/events?session_id=${encodeURIComponent(sessionId)}`;
-
-		const fetchSse = async () => {
-			try {
-				const response = await fetch(url, {
-					signal: this.abortController!.signal,
-					headers: { Accept: "text/event-stream" },
-				});
-				if (!response.ok || !response.body) {
-					this.abortController = null;
-					this.errorHandler?.(`Stream connection failed: ${response.status}`);
-					return;
-				}
-				const reader = response.body.getReader();
-				const decoder = new TextDecoder();
-				let buffer = "";
-
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-
-					buffer += decoder.decode(value, { stream: true });
-					const lines = buffer.split("\n");
-					buffer = lines.pop() ?? "";
-
-					let currentType: StreamEventType = "message";
-					for (const line of lines) {
-						if (line.startsWith("event:")) {
-							currentType = line.slice(6).trim() as StreamEventType;
-						} else if (line.startsWith("data:")) {
-							const data = line.slice(5).trim();
-							this.eventHandler?.({ type: currentType, data });
-							currentType = "message";
-						}
-					}
-				}
-				this.abortController = null;
-				this.doneHandler?.();
-			} catch (err: unknown) {
-				this.abortController = null;
-				if (err instanceof Error && err.name === "AbortError") {
-					this.doneHandler?.();
-				} else {
-					this.errorHandler?.(String(err));
-				}
-			}
-		};
-
-		fetchSse();
-	}
-
-	/** Parse a raw WebSocket message into a StreamEvent and dispatch */
-	private handleStreamData(raw: string): void {
+	/** Parse a mux WebSocket frame */
+	private handleMuxFrame(raw: string): void {
 		try {
-			const parsed = JSON.parse(raw);
-			const type: StreamEventType = parsed.type ?? parsed.event ?? "message";
-			const data = parsed.data ?? parsed.content ?? parsed.text ?? "";
-			this.eventHandler?.({ type, data: typeof data === "string" ? data : JSON.stringify(data) });
+			const frame = JSON.parse(raw);
+			const payload = frame.payload ?? frame;
 
-			if (type === "done") {
+			// DSH mux frames contain session events
+			// Common payload types: message/chunk, tool/call, tool/result, turn/end, etc.
+			const eventType = payload.type ?? payload.event ?? payload.kind ?? "message";
+
+			if (eventType === "turn/end" || eventType === "session/idle") {
 				this.doneHandler?.();
+				return;
+			}
+
+			// Map DSH event types to our StreamEvent types
+			let type: StreamEventType = "message";
+			let data = "";
+
+			if (eventType === "message/chunk" || eventType === "assistant/chunk") {
+				type = "message";
+				data = payload.content ?? payload.text ?? payload.chunk ?? "";
+			} else if (eventType === "tool/call" || eventType === "tool/invoke") {
+				type = "tool_call";
+				data = JSON.stringify({ name: payload.name ?? payload.tool, input: payload.input ?? payload.args });
+			} else if (eventType === "tool/result" || eventType === "tool/return") {
+				type = "tool_result";
+				data = typeof payload.output === "string" ? payload.output : JSON.stringify(payload.output ?? payload.result);
+			} else if (eventType === "error" || eventType === "turn/error") {
+				type = "error";
+				data = payload.message ?? payload.error ?? String(payload);
+			} else if (eventType === "message/text") {
+				type = "message";
+				data = payload.text ?? "";
+			}
+
+			if (data || type !== "message") {
+				this.eventHandler?.({ type, data });
 			}
 		} catch {
-			// Non-JSON: treat entire message as a text token
-			this.eventHandler?.({ type: "message", data: raw });
+			// Non-JSON or unrecognized frame — ignore
 		}
 	}
 
-	/** Abort the current stream (both WebSocket and SSE) */
-	abort(): void {
+	/** Disconnect the mux WebSocket */
+	disconnectMux(): void {
 		if (this.ws) {
-			this.ws.close(1000, "Client abort");
+			this.ws.close(1000, "Client disconnect");
 			this.ws = null;
-		}
-		if (this.abortController) {
-			this.abortController.abort();
-			this.abortController = null;
 		}
 		this.eventHandler = null;
 		this.doneHandler = null;
 		this.errorHandler = null;
 	}
 
-	/** Check if currently streaming */
-	isStreaming(): boolean {
-		return this.ws !== null || this.abortController !== null;
+	/** Check if mux is connected */
+	isMuxConnected(): boolean {
+		return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
 	}
 
-	/** POST with timeout — wraps requestUrl */
-	private async postWithTimeout(
-		url: string,
-		body: Record<string, string>
-	): Promise<Record<string, any>> {
-		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-		try {
-			const resp = await requestUrl({
-				url,
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(body),
-			});
-			clearTimeout(timer);
-			return resp.json;
-		} catch (e) {
-			clearTimeout(timer);
-			if (e instanceof Error && e.name === "AbortError") {
-				throw new Error(`Request timeout after ${REQUEST_TIMEOUT_MS}ms: ${url}`);
-			}
-			throw e;
-		}
+	/** Abort current streaming (alias for disconnectMux) */
+	abort(): void {
+		this.disconnectMux();
 	}
 
 	/** Build a ChatMessage object */

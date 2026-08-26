@@ -153,7 +153,7 @@ export default class DshdianPlugin extends Plugin {
 		// Ensure session exists
 		let sid = this.modeManager.getSessionId();
 		if (!sid) {
-			await this.modeManager.switchMode(this.modeManager.getCurrentMode());
+			await this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
 			sid = this.modeManager.getSessionId();
 			if (!sid) {
 				view.addMessage(
@@ -163,9 +163,12 @@ export default class DshdianPlugin extends Plugin {
 			}
 		}
 
-		// Send message to harness
+		// Send message to harness (prepend context if any)
+		const fullContent = context
+			? `[Context]\n${context}\n\n[User Message]\n${content}`
+			: content;
 		try {
-			await this.client.sendMessage(sid, content, context);
+			await this.client.sendMessage(sid, fullContent);
 		} catch (e) {
 			console.warn("dshdian: failed to send message", e);
 			view.addMessage(
@@ -182,61 +185,61 @@ export default class DshdianPlugin extends Plugin {
 		view.startStreamingMessage();
 		let currentToolName: string | null = null;
 
-		this.client.streamResponse(
-			sid,
-			(event: StreamEvent) => {
-				switch (event.type) {
-					case "message":
-						// Token-by-token append to the streaming message
-						view.appendStreamToken(event.data);
-						break;
-					case "tool_call":
-						// Parse tool call event: intercept with approval strategy
-						try {
-							const info = JSON.parse(event.data);
-							currentToolName = info.name ?? info.tool ?? "unknown";
-						} catch {
-							currentToolName = event.data || "unknown";
-						}
-						view.addToolCall({ name: currentToolName!, status: "running" });
-						// Run approval check asynchronously
-						this.handleToolApproval(currentToolName!, view);
-						break;
-					case "tool_result":
-						// Tool completed — show result summary
-						if (currentToolName) {
-							const summary = event.data.length > 100
-								? event.data.slice(0, 100) + "..."
-								: event.data;
-							view.updateToolCall(currentToolName, {
-								name: currentToolName,
-								status: "completed",
-								result: summary,
-							});
-							currentToolName = null;
-						}
-						break;
-					case "error":
-						view.addMessage(HarnessClient.buildMessage("system", `Error: ${event.data}`));
-						break;
-					case "done":
-						// Handled in onDone callback
-						break;
+		// Connect to mux event stream if not already connected
+		if (!this.client.isMuxConnected()) {
+			this.client.connectMux(
+				(event: StreamEvent) => {
+					switch (event.type) {
+						case "message":
+							view.appendStreamToken(event.data);
+							break;
+						case "tool_call":
+							try {
+								const info = JSON.parse(event.data);
+								currentToolName = info.name ?? info.tool ?? "unknown";
+							} catch {
+								currentToolName = event.data || "unknown";
+							}
+							view.addToolCall({ name: currentToolName!, status: "running" });
+							this.handleToolApproval(currentToolName!, view);
+							break;
+						case "tool_result":
+							if (currentToolName) {
+								const summary = event.data.length > 100
+									? event.data.slice(0, 100) + "..."
+									: event.data;
+								view.updateToolCall(currentToolName, {
+									name: currentToolName,
+									status: "completed",
+									result: summary,
+								});
+								currentToolName = null;
+							}
+							break;
+						case "error":
+							view.addMessage(HarnessClient.buildMessage("system", `Error: ${event.data}`));
+							break;
+						case "done":
+							view.finalizeStreamingMessage();
+							view.setInputEnabled(true);
+							view.setStatus("connected");
+							break;
+					}
+				},
+				() => {
+					// Stream ended
+					view.finalizeStreamingMessage();
+					view.setInputEnabled(true);
+					view.setStatus("connected");
+				},
+				(err: string) => {
+					view.finalizeStreamingMessage();
+					view.addMessage(HarnessClient.buildMessage("system", `Stream error: ${err}`));
+					view.setInputEnabled(true);
+					view.setStatus("connected");
 				}
-			},
-			() => {
-				// Stream complete
-				view.finalizeStreamingMessage();
-				view.setInputEnabled(true);
-				view.setStatus("connected");
-			},
-			(err: string) => {
-				view.finalizeStreamingMessage();
-				view.addMessage(HarnessClient.buildMessage("system", `Stream error: ${err}`));
-				view.setInputEnabled(true);
-				view.setStatus("connected");
-			}
-		);
+			);
+		}
 	}
 
 	/** Intercept a tool call with the approval strategy */
@@ -279,7 +282,7 @@ export default class DshdianPlugin extends Plugin {
 			view.clearMessages();
 			view.setMode(mode);
 		}
-		await this.modeManager.switchMode(mode);
+		await this.modeManager.switchMode(mode, this.getVaultPath());
 
 		// Start/stop generated dir watcher for Creator mode
 		if (mode === Mode.Creator) {
@@ -305,7 +308,7 @@ export default class DshdianPlugin extends Plugin {
 			view.updateContextMeter(0, this.settings.maxContextLength);
 		}
 		// Reset session so next message creates a new one
-		this.modeManager.switchMode(this.modeManager.getCurrentMode());
+		this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
 	}
 
 	/** Handle show history request */
@@ -398,6 +401,10 @@ export default class DshdianPlugin extends Plugin {
 				);
 			}
 		}
+	}
+
+	private getVaultPath(): string {
+		return (this.app.vault.adapter as any).basePath ?? "";
 	}
 
 	private getChatView(): ChatPanelView | null {
