@@ -50,7 +50,20 @@ Vault 操作 → Obsidian CLI
 
 ## 开发状态
 
-🚧 **设计阶段** — 正在进行架构设计和接口定义，尚未发布可用版本。
+🚧 **MVP 实现中** — 核心功能已完成，WebSocket 事件流对接待修复。
+
+### 已完成
+- ✅ 插件脚手架 + Chat Panel
+- ✅ DSH 进程自动启动（独立 `dshdian` profile，端口 3180）
+- ✅ HTTP API 通信（session.create / session.prompt）
+- ✅ 三模式切换（聊天/管家/创造）
+- ✅ @引用文件 + fuzzy 搜索 + pill UI
+- ✅ Git 感知审批策略
+- ✅ 创造模式插件生成 pipeline
+- ✅ 设置面板（5 组配置）
+
+### 待修复
+- ⚠️ WebSocket events.mux 在 Obsidian 中连接失败（DSH 端已正常处理）
 
 ## License
 
