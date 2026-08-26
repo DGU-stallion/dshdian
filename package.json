@@ -1,0 +1,19 @@
+{
+  "name": "dshdian",
+  "version": "0.0.1",
+  "description": "Embed DSH (DeepSeek Harness) as an AI collaborator in Obsidian",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": ["obsidian", "deepseek", "harness", "ai", "plugin-generator"],
+  "author": "DGU-stallion",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "18.19.0",
+    "esbuild": "0.25.0",
+    "obsidian": "1.7.2",
+    "typescript": "5.9.3"
+  }
+}
