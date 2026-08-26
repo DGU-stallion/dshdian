@@ -27,13 +27,20 @@ export interface ChatMessage {
 	timestamp: number;
 }
 
-/** SSE event types from the harness */
-export type SseEventType = "message" | "tool_call" | "tool_result" | "done" | "error";
+/** SSE/WebSocket event types from the harness */
+export type StreamEventType = "message" | "tool_call" | "tool_result" | "done" | "error";
 
-/** Parsed SSE event */
-export interface SseEvent {
-	type: SseEventType;
+/** Parsed streaming event */
+export interface StreamEvent {
+	type: StreamEventType;
 	data: string;
+}
+
+/** Tool call information displayed in chat */
+export interface ToolCallInfo {
+	name: string;
+	status: "running" | "completed" | "failed";
+	result?: string;
 }
 
 /** Approval levels based on git state */

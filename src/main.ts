@@ -9,7 +9,7 @@ import { PluginGenerator } from "./services/PluginGenerator";
 import { DshdianSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { Mode } from "./types";
 import type { DshdianSettings } from "./settings";
-import type { SseEvent } from "./types";
+import type { StreamEvent } from "./types";
 
 export default class DshdianPlugin extends Plugin {
 	settings: DshdianSettings = DEFAULT_SETTINGS;
@@ -55,6 +55,20 @@ export default class DshdianPlugin extends Plugin {
 		if (this.settings.autoStartHarness) {
 			this.processManager.start();
 		}
+
+		// Listen to process manager events to update UI status
+		this.processManager.on("started", () => {
+			const view = this.getChatView();
+			if (view) view.setStatus("connected");
+		});
+		this.processManager.on("stopped", () => {
+			const view = this.getChatView();
+			if (view) view.setStatus("disconnected");
+		});
+		this.processManager.on("error", () => {
+			const view = this.getChatView();
+			if (view) view.setStatus("disconnected");
+		});
 	}
 
 	onunload(): void {
@@ -94,6 +108,15 @@ export default class DshdianPlugin extends Plugin {
 		const view = this.getChatView();
 		if (!view) return;
 
+		// Check harness connectivity
+		if (!this.processManager.isRunning()) {
+			view.setStatus("disconnected");
+			view.addMessage(
+				HarnessClient.buildMessage("system", "DSH Harness is not connected. Check settings or start the harness.")
+			);
+			return;
+		}
+
 		// Parse @references and build context
 		const refs = this.referenceResolver.parseReferences(content);
 		let context: string | undefined;
@@ -105,14 +128,11 @@ export default class DshdianPlugin extends Plugin {
 		view.addMessage(HarnessClient.buildMessage("user", content));
 
 		// Ensure session exists
-		const sessionId = this.modeManager.getSessionId();
-		if (!sessionId) {
-			view.addMessage(
-				HarnessClient.buildMessage("system", "No active session. Switching mode to reconnect...")
-			);
+		let sid = this.modeManager.getSessionId();
+		if (!sid) {
 			await this.modeManager.switchMode(this.modeManager.getCurrentMode());
-			const newSession = this.modeManager.getSessionId();
-			if (!newSession) {
+			sid = this.modeManager.getSessionId();
+			if (!sid) {
 				view.addMessage(
 					HarnessClient.buildMessage("system", "Failed to create session. Is the DSH Harness running?")
 				);
@@ -120,8 +140,7 @@ export default class DshdianPlugin extends Plugin {
 			}
 		}
 
-		const sid = this.modeManager.getSessionId()!;
-
+		// Send message to harness
 		try {
 			await this.client.sendMessage(sid, content, context);
 		} catch (e) {
@@ -132,25 +151,65 @@ export default class DshdianPlugin extends Plugin {
 			return;
 		}
 
-		// Stream response
-		let assistantContent = "";
+		// Disable input while streaming
+		view.setInputEnabled(false);
+		view.setStatus("streaming");
+
+		// Start streaming response — render tokens in real-time
+		view.startStreamingMessage();
+		let currentToolName: string | null = null;
+
 		this.client.streamResponse(
 			sid,
-			(event: SseEvent) => {
-				if (event.type === "message") {
-					assistantContent += event.data;
-					// Update the last assistant message in real-time
-				} else if (event.type === "error") {
-					view.addMessage(HarnessClient.buildMessage("system", `Error: ${event.data}`));
+			(event: StreamEvent) => {
+				switch (event.type) {
+					case "message":
+						// Token-by-token append to the streaming message
+						view.appendStreamToken(event.data);
+						break;
+					case "tool_call":
+						// Parse tool call event: show tool name as running
+						try {
+							const info = JSON.parse(event.data);
+							currentToolName = info.name ?? info.tool ?? "unknown";
+						} catch {
+							currentToolName = event.data || "unknown";
+						}
+						view.addToolCall({ name: currentToolName!, status: "running" });
+						break;
+					case "tool_result":
+						// Tool completed — show result summary
+						if (currentToolName) {
+							const summary = event.data.length > 100
+								? event.data.slice(0, 100) + "..."
+								: event.data;
+							view.updateToolCall(currentToolName, {
+								name: currentToolName,
+								status: "completed",
+								result: summary,
+							});
+							currentToolName = null;
+						}
+						break;
+					case "error":
+						view.addMessage(HarnessClient.buildMessage("system", `Error: ${event.data}`));
+						break;
+					case "done":
+						// Handled in onDone callback
+						break;
 				}
 			},
 			() => {
-				if (assistantContent.length > 0) {
-					view.addMessage(HarnessClient.buildMessage("assistant", assistantContent));
-				}
+				// Stream complete
+				view.finalizeStreamingMessage();
+				view.setInputEnabled(true);
+				view.setStatus("connected");
 			},
 			(err: string) => {
+				view.finalizeStreamingMessage();
 				view.addMessage(HarnessClient.buildMessage("system", `Stream error: ${err}`));
+				view.setInputEnabled(true);
+				view.setStatus("connected");
 			}
 		);
 	}

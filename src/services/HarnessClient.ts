@@ -1,13 +1,21 @@
 import { requestUrl } from "obsidian";
-import type { ChatMessage, SseEvent, SseEventType } from "../types";
+import type { ChatMessage, StreamEvent, StreamEventType } from "../types";
+
+/** Default request timeout in milliseconds */
+const REQUEST_TIMEOUT_MS = 30000;
 
 /**
- * HTTP + SSE client for communicating with the DSH Harness.
- * POST to send messages, SSE to stream responses.
+ * HTTP + WebSocket client for communicating with the DSH Harness.
+ * POST to send messages, WebSocket /api/events.mux to stream responses.
+ * Falls back to SSE /api/events if WebSocket is unavailable.
  */
 export class HarnessClient {
 	private port: number;
+	private ws: WebSocket | null = null;
 	private abortController: AbortController | null = null;
+	private eventHandler: ((event: StreamEvent) => void) | null = null;
+	private doneHandler: (() => void) | null = null;
+	private errorHandler: ((err: string) => void) | null = null;
 
 	constructor(port: number) {
 		this.port = port;
@@ -21,20 +29,21 @@ export class HarnessClient {
 		return `http://localhost:${this.port}`;
 	}
 
+	private get wsUrl(): string {
+		return `ws://localhost:${this.port}`;
+	}
+
 	/** Create a new session, returns session ID */
 	async createSession(systemPrompt?: string): Promise<string> {
 		const body: Record<string, string> = {};
 		if (systemPrompt) {
 			body.system_prompt = systemPrompt;
 		}
-		const resp = await requestUrl({
-			url: `${this.baseUrl}/api/open`,
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(body),
-		});
-		const data = resp.json;
-		return data.session_id ?? data.sessionId ?? "";
+		const resp = await this.postWithTimeout(
+			`${this.baseUrl}/api/open`,
+			body
+		);
+		return resp.session_id ?? resp.sessionId ?? "";
 	}
 
 	/** Send a message to an existing session */
@@ -50,24 +59,65 @@ export class HarnessClient {
 		if (context) {
 			body.context = context;
 		}
-		await requestUrl({
-			url: `${this.baseUrl}/api/respond`,
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(body),
-		});
+		await this.postWithTimeout(`${this.baseUrl}/api/respond`, body);
 	}
 
 	/**
-	 * Connect to SSE stream for a session.
-	 * Calls onEvent for each parsed event; calls onDone when stream ends.
+	 * Connect to the streaming endpoint for a session.
+	 * Tries WebSocket /api/events.mux first; falls back to SSE /api/events.
 	 */
 	streamResponse(
 		sessionId: string,
-		onEvent: (event: SseEvent) => void,
+		onEvent: (event: StreamEvent) => void,
 		onDone: () => void,
 		onError: (err: string) => void
 	): void {
+		this.eventHandler = onEvent;
+		this.doneHandler = onDone;
+		this.errorHandler = onError;
+
+		// Try WebSocket first
+		this.connectWebSocket(sessionId);
+	}
+
+	/** Connect via WebSocket to /api/events.mux */
+	private connectWebSocket(sessionId: string): void {
+		const url = `${this.wsUrl}/api/events.mux?session_id=${encodeURIComponent(sessionId)}`;
+
+		try {
+			this.ws = new WebSocket(url);
+		} catch {
+			// WebSocket constructor may throw if URL is invalid
+			this.fallbackToSse(sessionId);
+			return;
+		}
+
+		this.ws.onopen = () => {
+			// Connection established
+		};
+
+		this.ws.onmessage = (event: MessageEvent) => {
+			this.handleStreamData(String(event.data));
+		};
+
+		this.ws.onerror = () => {
+			// WebSocket failed, fallback to SSE
+			this.ws = null;
+			this.fallbackToSse(sessionId);
+		};
+
+		this.ws.onclose = (event: CloseEvent) => {
+			this.ws = null;
+			// Normal close (code 1000) means stream completed
+			if (event.code === 1000 || event.wasClean) {
+				this.doneHandler?.();
+			}
+			// Abnormal close without prior error — already handled in onerror
+		};
+	}
+
+	/** Fallback: connect via SSE to /api/events */
+	private fallbackToSse(sessionId: string): void {
 		this.abortController = new AbortController();
 		const url = `${this.baseUrl}/api/events?session_id=${encodeURIComponent(sessionId)}`;
 
@@ -79,7 +129,7 @@ export class HarnessClient {
 				});
 				if (!response.ok || !response.body) {
 					this.abortController = null;
-					onError(`SSE connection failed: ${response.status}`);
+					this.errorHandler?.(`Stream connection failed: ${response.status}`);
 					return;
 				}
 				const reader = response.body.getReader();
@@ -94,25 +144,25 @@ export class HarnessClient {
 					const lines = buffer.split("\n");
 					buffer = lines.pop() ?? "";
 
-					let currentType: SseEventType = "message";
+					let currentType: StreamEventType = "message";
 					for (const line of lines) {
 						if (line.startsWith("event:")) {
-							currentType = line.slice(6).trim() as SseEventType;
+							currentType = line.slice(6).trim() as StreamEventType;
 						} else if (line.startsWith("data:")) {
 							const data = line.slice(5).trim();
-							onEvent({ type: currentType, data });
+							this.eventHandler?.({ type: currentType, data });
 							currentType = "message";
 						}
 					}
 				}
 				this.abortController = null;
-				onDone();
+				this.doneHandler?.();
 			} catch (err: unknown) {
 				this.abortController = null;
 				if (err instanceof Error && err.name === "AbortError") {
-					onDone();
+					this.doneHandler?.();
 				} else {
-					onError(String(err));
+					this.errorHandler?.(String(err));
 				}
 			}
 		};
@@ -120,11 +170,66 @@ export class HarnessClient {
 		fetchSse();
 	}
 
-	/** Abort the current SSE stream */
+	/** Parse a raw WebSocket message into a StreamEvent and dispatch */
+	private handleStreamData(raw: string): void {
+		try {
+			const parsed = JSON.parse(raw);
+			const type: StreamEventType = parsed.type ?? parsed.event ?? "message";
+			const data = parsed.data ?? parsed.content ?? parsed.text ?? "";
+			this.eventHandler?.({ type, data: typeof data === "string" ? data : JSON.stringify(data) });
+
+			if (type === "done") {
+				this.doneHandler?.();
+			}
+		} catch {
+			// Non-JSON: treat entire message as a text token
+			this.eventHandler?.({ type: "message", data: raw });
+		}
+	}
+
+	/** Abort the current stream (both WebSocket and SSE) */
 	abort(): void {
+		if (this.ws) {
+			this.ws.close(1000, "Client abort");
+			this.ws = null;
+		}
 		if (this.abortController) {
 			this.abortController.abort();
 			this.abortController = null;
+		}
+		this.eventHandler = null;
+		this.doneHandler = null;
+		this.errorHandler = null;
+	}
+
+	/** Check if currently streaming */
+	isStreaming(): boolean {
+		return this.ws !== null || this.abortController !== null;
+	}
+
+	/** POST with timeout — wraps requestUrl */
+	private async postWithTimeout(
+		url: string,
+		body: Record<string, string>
+	): Promise<Record<string, any>> {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+		try {
+			const resp = await requestUrl({
+				url,
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			clearTimeout(timer);
+			return resp.json;
+		} catch (e) {
+			clearTimeout(timer);
+			if (e instanceof Error && e.name === "AbortError") {
+				throw new Error(`Request timeout after ${REQUEST_TIMEOUT_MS}ms: ${url}`);
+			}
+			throw e;
 		}
 	}
 
