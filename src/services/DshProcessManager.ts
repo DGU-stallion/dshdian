@@ -1,11 +1,16 @@
 import { Events, request } from "obsidian";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
+import { existsSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 import type { ChildProcess } from "child_process";
+
+/** DSH profile name dedicated to dshdian */
+const PROFILE_NAME = "dshdian";
 
 /**
  * Manages the DSH Harness process lifecycle.
- * Detects whether it's already running; provides health checks
- * with exponential backoff reconnection.
+ * Uses a dedicated 'dshdian' profile (port 3180) to avoid conflicts
+ * with the user's default web profile (port 3080).
  */
 export class DshProcessManager extends Events {
 	private port: number;
@@ -14,18 +19,80 @@ export class DshProcessManager extends Events {
 	private backoffMs = 1000;
 	private maxBackoffMs = 30000;
 	private process: ChildProcess | null = null;
+	private dshHome: string;
 
 	constructor(port: number) {
 		super();
 		this.port = port;
+		this.dshHome = process.env.DSH_HOME || join(process.env.HOME || "", ".dsh");
 	}
 
 	setPort(port: number): void {
 		this.port = port;
 	}
 
+	/** Find the dsh binary */
+	private findDsh(): string | null {
+		// Check npx cache (most common install method)
+		try {
+			const result = execSync(
+				"find ~/.npm/_npx -name 'dsh' -path '*/node_modules/.bin/dsh' 2>/dev/null | head -1",
+				{ encoding: "utf-8", timeout: 5000 }
+			).trim();
+			if (result && existsSync(result)) return result;
+		} catch { /* ignore */ }
+
+		// Check PATH
+		try {
+			const result = execSync("which dsh 2>/dev/null", {
+				encoding: "utf-8",
+				timeout: 3000,
+			}).trim();
+			if (result) return result;
+		} catch { /* ignore */ }
+
+		return null;
+	}
+
+	/** Ensure the dshdian profile exists and has web-app bundle */
+	private ensureProfile(dshBin: string): void {
+		const profileDir = join(this.dshHome, "profiles", PROFILE_NAME);
+		const pkgPath = join(profileDir, "package.json");
+
+		// Initialize profile if it doesn't exist
+		if (!existsSync(pkgPath)) {
+			try {
+				execSync(`"${dshBin}" plugin --profile ${PROFILE_NAME} --help`, {
+					encoding: "utf-8",
+					timeout: 15000,
+					stdio: "ignore",
+				});
+			} catch {
+				// --help exits non-zero but still creates the profile
+			}
+		}
+
+		// Ensure web-app bundle is in the profile
+		if (existsSync(pkgPath)) {
+			try {
+				const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+				const bundles: string[] = pkg?.dsh?.profile?.bundles ?? [];
+				if (!bundles.includes("@deepseek-ai/dsh-web-app")) {
+					bundles.push("@deepseek-ai/dsh-web-app");
+					if (!pkg.dsh) pkg.dsh = {};
+					if (!pkg.dsh.profile) pkg.dsh.profile = {};
+					pkg.dsh.profile.bundles = bundles;
+					writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), "utf-8");
+				}
+			} catch (e) {
+				console.warn("dshdian: failed to update profile package.json", e);
+			}
+		}
+	}
+
 	/** Attempt to detect or start the harness process */
 	async start(harnessPath?: string): Promise<void> {
+		// First check if already running
 		const alive = await this.healthCheck();
 		if (alive) {
 			this.running = true;
@@ -35,34 +102,70 @@ export class DshProcessManager extends Events {
 			return;
 		}
 
-		// Try to start the process
-		const cmd = harnessPath || "dsh";
+		// Find dsh binary
+		const dshBin = harnessPath || this.findDsh();
+		if (!dshBin) {
+			this.trigger("error", "DSH binary not found. Install with: npx @deepseek-ai/dsh web");
+			this.scheduleReconnect();
+			return;
+		}
+
+		// Ensure profile exists
+		this.ensureProfile(dshBin);
+
+		// Start DSH with dshdian profile
 		try {
-			this.process = spawn(cmd, ["web", "--port", String(this.port)], {
-				detached: true,
-				stdio: "ignore",
-			});
+			this.process = spawn(
+				dshBin,
+				["--profile", PROFILE_NAME, "--port", String(this.port), "--no-open"],
+				{
+					detached: true,
+					stdio: "ignore",
+					env: { ...process.env, DSH_HOME: this.dshHome },
+				}
+			);
 			this.process.unref();
+
 			this.process.on("error", (err) => {
-				console.warn("dshdian: failed to start harness process", err);
-				this.trigger("error", "Failed to start DSH Harness: " + err.message);
+				console.warn("dshdian: spawn failed:", err.message);
+				this.process = null;
+				this.trigger("error", "Failed to start DSH: " + err.message);
+				this.scheduleReconnect();
 			});
-			// Wait a bit then health check
+
+			// Poll for readiness
+			this.waitForReady();
+		} catch (e) {
+			this.process = null;
+			this.trigger("error", "Cannot spawn DSH: " + String(e));
+			this.scheduleReconnect();
+		}
+	}
+
+	/** Poll health check until ready or timeout */
+	private waitForReady(): void {
+		let attempts = 0;
+		const maxAttempts = 15; // up to ~30 seconds
+
+		const poll = (): void => {
+			const delay = attempts === 0 ? 3000 : 2000;
 			setTimeout(async () => {
+				attempts++;
 				const ok = await this.healthCheck();
 				if (ok) {
 					this.running = true;
 					this.backoffMs = 1000;
 					this.trigger("started");
 					this.scheduleHealthCheck();
+				} else if (attempts < maxAttempts) {
+					poll();
 				} else {
+					this.trigger("error", "DSH started but not responding on port " + this.port);
 					this.scheduleReconnect();
 				}
-			}, 2000);
-		} catch (e) {
-			this.trigger("error", "Cannot spawn DSH process: " + String(e));
-			this.scheduleReconnect();
-		}
+			}, delay);
+		};
+		poll();
 	}
 
 	/** Stop monitoring and kill spawned process if any */
@@ -74,9 +177,11 @@ export class DshProcessManager extends Events {
 		}
 		if (this.process) {
 			try {
-				this.process.kill();
+				if (this.process.pid) {
+					process.kill(-this.process.pid, "SIGTERM");
+				}
 			} catch {
-				// Process may have already exited
+				try { this.process.kill(); } catch { /* already exited */ }
 			}
 			this.process = null;
 		}
@@ -96,8 +201,7 @@ export class DshProcessManager extends Events {
 			}
 			this.trigger("health-fail");
 			return false;
-		} catch (e) {
-			console.warn("dshdian: health check failed", e);
+		} catch {
 			this.trigger("health-fail");
 			return false;
 		}

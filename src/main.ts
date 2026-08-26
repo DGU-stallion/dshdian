@@ -59,10 +59,8 @@ export default class DshdianPlugin extends Plugin {
 		// Settings tab
 		this.addSettingTab(new DshdianSettingTab(this.app, this));
 
-		// Start process manager if auto-start enabled
-		if (this.settings.autoStartHarness) {
-			this.processManager.start(this.settings.harnessPath || undefined);
-		}
+		// Always attempt to connect/start DSH Harness on plugin load
+		this.processManager.start(this.settings.harnessPath || undefined);
 
 		// Listen to process manager events to update UI status
 		this.processManager.on("started", () => {

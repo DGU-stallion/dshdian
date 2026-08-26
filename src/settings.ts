@@ -29,7 +29,7 @@ export interface DshdianSettings {
 export const DEFAULT_SETTINGS: DshdianSettings = {
 	harnessPort: 3180,
 	harnessPath: "",
-	autoStartHarness: false,
+	autoStartHarness: true,
 	defaultModel: "deepseek-v4",
 	reasoningEffort: "medium",
 	defaultMode: Mode.Chat,
