@@ -39,8 +39,15 @@ export default class DshdianPlugin extends Plugin {
 			view.setHandlers({
 				onSendMessage: (content, refs) => this.handleSendMessage(content, refs),
 				onModeChange: (mode) => this.handleModeChange(mode),
+				onModelChange: (model) => this.handleModelChange(model),
 				onGetSuggestions: (query) => this.referenceResolver.getSuggestions(query),
+				onGetCommands: () => this.getAvailableCommands(),
+				onNewChat: () => this.handleNewChat(),
+				onShowHistory: () => this.handleShowHistory(),
+				onAddContext: () => this.handleAddContext(),
 			});
+			view.setMode(this.settings.defaultMode);
+			view.setModel(this.settings.defaultModel);
 			return view;
 		});
 
@@ -280,6 +287,49 @@ export default class DshdianPlugin extends Plugin {
 		} else {
 			this.pluginGenerator.stopWatching();
 		}
+	}
+
+	/** Handle model change from the chat panel */
+	private handleModelChange(model: string): void {
+		// Store the selected model; will be used on next message send
+		this.settings.defaultModel = model;
+	}
+
+	/** Handle new chat request */
+	private handleNewChat(): void {
+		const view = this.getChatView();
+		if (view) {
+			view.clearMessages();
+		}
+		// Reset session so next message creates a new one
+		this.modeManager.switchMode(this.modeManager.getCurrentMode());
+	}
+
+	/** Handle show history request */
+	private handleShowHistory(): void {
+		// Placeholder: show a notice for now
+		const view = this.getChatView();
+		if (view) {
+			view.addMessage(
+				HarnessClient.buildMessage("system", "Chat history is not yet implemented.")
+			);
+		}
+	}
+
+	/** Handle add context request */
+	private handleAddContext(): void {
+		// Placeholder: could open a file picker modal
+		const view = this.getChatView();
+		if (view) {
+			view.addMessage(
+				HarnessClient.buildMessage("system", "Use @ in the text field to add file context.")
+			);
+		}
+	}
+
+	/** Get available slash commands */
+	private getAvailableCommands(): string[] {
+		return ["clear", "mode", "model", "help"];
 	}
 
 	/** Handle file change in generated dir: auto-compile and show preview UI */

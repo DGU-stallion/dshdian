@@ -1,4 +1,4 @@
-/* dshdian — Chat Panel styles */
+/* dshdian — DSH-inspired Chat Panel styles */
 
 /* ====== Container ====== */
 .dshdian-chat-container {
@@ -8,42 +8,33 @@
 	overflow: hidden;
 }
 
-/* ====== Header ====== */
-.dshdian-header {
+/* ====== Header buttons (New / History) ====== */
+.dshdian-header-actions {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	padding: 8px 12px;
-	border-bottom: 1px solid var(--background-modifier-border);
+	gap: 4px;
+	padding: 8px 12px 0;
+	justify-content: flex-end;
 	flex-shrink: 0;
 }
 
-.dshdian-mode-buttons {
+.dshdian-icon-btn {
 	display: flex;
-	gap: 4px;
-}
-
-.dshdian-mode-btn {
-	padding: 4px 10px;
-	border-radius: 4px;
-	font-size: 12px;
-	font-weight: 500;
-	cursor: pointer;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 6px;
+	border: none;
+	background: transparent;
 	color: var(--text-muted);
-	transition: all 0.15s ease;
+	cursor: pointer;
+	font-size: 16px;
 }
 
-.dshdian-mode-btn:hover {
+.dshdian-icon-btn:hover {
 	background: var(--background-modifier-hover);
 	color: var(--text-normal);
-}
-
-.dshdian-mode-btn.dshdian-mode-active {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	border-color: var(--interactive-accent);
 }
 
 /* ====== Status indicator ====== */
@@ -78,52 +69,55 @@
 .dshdian-message-list {
 	flex: 1;
 	overflow-y: auto;
-	padding: 12px;
+	padding: 12px 16px;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 16px;
 }
 
-/* ====== Messages ====== */
+/* ====== Messages — shared ====== */
 .dshdian-message {
-	border-radius: 8px;
-	padding: 8px 12px;
-	max-width: 90%;
+	font-size: 16px;
+	line-height: 28px;
 	word-wrap: break-word;
 }
 
+/* ====== User bubble ====== */
 .dshdian-message-user {
 	align-self: flex-end;
+	max-width: 82%;
+	border-radius: 22px;
+	padding: 10px 16px;
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 }
 
+/* ====== Assistant — full width, markdown ====== */
 .dshdian-message-assistant {
 	align-self: flex-start;
-	background: var(--background-secondary);
+	width: 100%;
 	color: var(--text-normal);
 }
 
+.dshdian-message-assistant .dshdian-message-content {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.dshdian-message-assistant .dshdian-message-content p {
+	margin: 0;
+}
+
+/* ====== System message ====== */
 .dshdian-message-system {
 	align-self: center;
 	background: var(--background-modifier-border);
 	color: var(--text-muted);
 	font-size: 12px;
 	font-style: italic;
-}
-
-.dshdian-message-role {
-	display: block;
-	font-size: 10px;
-	font-weight: 600;
-	text-transform: uppercase;
-	opacity: 0.6;
-	margin-bottom: 2px;
-}
-
-.dshdian-message-content {
-	line-height: 1.5;
-	white-space: pre-wrap;
+	padding: 4px 12px;
+	border-radius: 12px;
 }
 
 /* Streaming indicator */
@@ -140,12 +134,18 @@
 .dshdian-tool-call {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 4px 10px;
-	border-radius: 4px;
-	font-size: 12px;
+	gap: 8px;
+	padding: 6px 12px;
+	border-radius: 6px;
+	font-size: 13px;
 	background: var(--background-secondary-alt);
 	border-left: 3px solid var(--text-muted);
+	cursor: pointer;
+	user-select: none;
+}
+
+.dshdian-tool-call:hover {
+	background: var(--background-modifier-hover);
 }
 
 .dshdian-tool-running {
@@ -178,36 +178,54 @@
 	max-width: 200px;
 }
 
-/* ====== Input area ====== */
-.dshdian-input-area {
-	padding: 8px 12px;
-	border-top: 1px solid var(--background-modifier-border);
-	flex-shrink: 0;
+.dshdian-tool-detail {
+	display: none;
+	padding: 6px 12px 6px 24px;
+	font-size: 12px;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	font-family: var(--font-monospace);
 }
 
+.dshdian-tool-call.dshdian-tool-expanded + .dshdian-tool-detail {
+	display: block;
+}
+
+/* ====== Composer Card ====== */
+.dshdian-composer {
+	flex-shrink: 0;
+	margin: 0 12px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 16px;
+	padding: 12px;
+	background: var(--background-primary);
+}
+
+/* Context pills row */
 .dshdian-pill-container {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 4px;
-	margin-bottom: 6px;
+	gap: 6px;
+	margin-bottom: 8px;
 	min-height: 0;
 }
 
 .dshdian-pill-container:empty {
 	display: none;
+	margin-bottom: 0;
 }
 
 .dshdian-ref-pill {
 	display: inline-flex;
 	align-items: center;
-	gap: 3px;
-	padding: 2px 8px;
+	gap: 4px;
+	padding: 2px 10px;
 	border-radius: 12px;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	font-size: 11px;
+	background: var(--background-secondary-alt);
+	color: var(--text-normal);
+	font-size: 12px;
 	font-weight: 500;
-	max-width: 200px;
+	max-width: 180px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -215,34 +233,34 @@
 
 .dshdian-ref-pill-close {
 	cursor: pointer;
-	opacity: 0.7;
+	opacity: 0.6;
 	font-weight: bold;
-	padding-left: 2px;
+	font-size: 14px;
+	line-height: 1;
 }
 
 .dshdian-ref-pill-close:hover {
 	opacity: 1;
 }
 
+/* Textarea */
 .dshdian-input {
 	width: 100%;
-	resize: vertical;
+	resize: none;
 	min-height: 44px;
 	max-height: 200px;
-	padding: 8px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 6px;
-	background: var(--background-primary);
+	padding: 8px 0;
+	border: none;
+	background: transparent;
 	color: var(--text-normal);
 	font-family: inherit;
-	font-size: 13px;
-	line-height: 1.4;
+	font-size: 15px;
+	line-height: 1.5;
+	outline: none;
 }
 
-.dshdian-input:focus {
-	border-color: var(--interactive-accent);
-	outline: none;
-	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+.dshdian-input::placeholder {
+	color: var(--text-faint);
 }
 
 .dshdian-input:disabled {
@@ -250,39 +268,76 @@
 	cursor: not-allowed;
 }
 
+/* Toolbar row */
+.dshdian-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.dshdian-toolbar-spacer {
+	flex: 1;
+}
+
+.dshdian-toolbar-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 10px;
+	border-radius: 14px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-muted);
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.dshdian-toolbar-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
 .dshdian-send-btn {
-	margin-top: 6px;
-	padding: 6px 16px;
-	border-radius: 4px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
-	font-size: 12px;
-	font-weight: 600;
+	font-size: 14px;
 	cursor: pointer;
 	border: none;
 	transition: opacity 0.15s;
 }
 
 .dshdian-send-btn:hover {
-	opacity: 0.9;
+	opacity: 0.85;
 }
 
 /* ====== Suggestions dropdown ====== */
 .dshdian-suggestions {
-	position: relative;
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	right: 0;
 	z-index: 10;
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 6px;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	border-radius: 10px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 	max-height: 200px;
 	overflow-y: auto;
-	margin-top: 4px;
+	margin-bottom: 4px;
 }
 
 .dshdian-suggestion-item {
-	padding: 6px 10px;
-	font-size: 12px;
+	padding: 8px 12px;
+	font-size: 13px;
 	cursor: pointer;
 	border-bottom: 1px solid var(--background-modifier-border);
 	overflow: hidden;
@@ -298,11 +353,44 @@
 	background: var(--background-modifier-hover);
 }
 
+/* ====== Code blocks ====== */
+.dshdian-message-assistant pre {
+	position: relative;
+	background: var(--code-background);
+	border-radius: 8px;
+	padding: 12px 16px;
+	overflow-x: auto;
+}
+
+.dshdian-copy-btn {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	padding: 2px 8px;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-muted);
+	font-size: 11px;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s;
+}
+
+.dshdian-message-assistant pre:hover .dshdian-copy-btn {
+	opacity: 1;
+}
+
+.dshdian-copy-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
 /* ====== Approval UI ====== */
 .dshdian-approval-request {
 	padding: 10px 12px;
 	margin: 6px 0;
-	border-radius: 6px;
+	border-radius: 8px;
 	background: var(--background-secondary);
 	border: 1px solid var(--color-orange);
 }
@@ -318,32 +406,26 @@
 	gap: 8px;
 }
 
-.dshdian-approve-btn {
+.dshdian-approve-btn,
+.dshdian-reject-btn {
 	padding: 4px 12px;
-	border-radius: 4px;
+	border-radius: 6px;
 	font-size: 12px;
 	font-weight: 600;
 	cursor: pointer;
 	border: none;
-	background: var(--color-green);
 	color: white;
 }
 
-.dshdian-approve-btn:hover {
-	opacity: 0.9;
+.dshdian-approve-btn {
+	background: var(--color-green);
 }
 
 .dshdian-reject-btn {
-	padding: 4px 12px;
-	border-radius: 4px;
-	font-size: 12px;
-	font-weight: 600;
-	cursor: pointer;
-	border: none;
 	background: var(--color-red);
-	color: white;
 }
 
+.dshdian-approve-btn:hover,
 .dshdian-reject-btn:hover {
 	opacity: 0.9;
 }
@@ -352,7 +434,7 @@
 .dshdian-notification {
 	padding: 4px 10px;
 	margin: 4px 0;
-	border-radius: 4px;
+	border-radius: 6px;
 	background: var(--background-secondary-alt);
 	font-size: 11px;
 	color: var(--text-muted);
@@ -363,7 +445,7 @@
 .dshdian-preview-state {
 	padding: 10px 12px;
 	margin: 8px 0;
-	border-radius: 6px;
+	border-radius: 8px;
 	background: var(--background-secondary);
 	border: 1px solid var(--color-blue);
 }
@@ -380,37 +462,28 @@
 	gap: 6px;
 }
 
-.dshdian-preview-install-btn {
+.dshdian-preview-install-btn,
+.dshdian-preview-retry-btn,
+.dshdian-preview-abandon-btn {
 	padding: 4px 12px;
-	border-radius: 4px;
+	border-radius: 6px;
 	font-size: 12px;
 	font-weight: 600;
 	cursor: pointer;
 	border: none;
-	background: var(--color-green);
 	color: white;
+}
+
+.dshdian-preview-install-btn {
+	background: var(--color-green);
 }
 
 .dshdian-preview-retry-btn {
-	padding: 4px 12px;
-	border-radius: 4px;
-	font-size: 12px;
-	font-weight: 600;
-	cursor: pointer;
-	border: none;
 	background: var(--color-blue);
-	color: white;
 }
 
 .dshdian-preview-abandon-btn {
-	padding: 4px 12px;
-	border-radius: 4px;
-	font-size: 12px;
-	font-weight: 600;
-	cursor: pointer;
-	border: none;
 	background: var(--color-red);
-	color: white;
 }
 
 .dshdian-preview-install-btn:hover,
