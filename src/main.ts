@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
+import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { ChatPanelView, VIEW_TYPE_CHAT } from "./views/ChatPanelView";
 import { DshProcessManager } from "./services/DshProcessManager";
 import { HarnessClient } from "./services/HarnessClient";
@@ -61,7 +61,7 @@ export default class DshdianPlugin extends Plugin {
 
 		// Start process manager if auto-start enabled
 		if (this.settings.autoStartHarness) {
-			this.processManager.start();
+			this.processManager.start(this.settings.harnessPath || undefined);
 		}
 
 		// Listen to process manager events to update UI status
@@ -144,6 +144,10 @@ export default class DshdianPlugin extends Plugin {
 		if (allRefs.length > 0) {
 			context = await this.referenceResolver.buildContext(allRefs);
 		}
+
+		// Update context meter
+		const contextLen = (context?.length ?? 0) + content.length;
+		view.updateContextMeter(contextLen, this.settings.maxContextLength);
 
 		// Show user message in panel
 		view.addMessage(HarnessClient.buildMessage("user", content));
@@ -300,6 +304,7 @@ export default class DshdianPlugin extends Plugin {
 		const view = this.getChatView();
 		if (view) {
 			view.clearMessages();
+			view.updateContextMeter(0, this.settings.maxContextLength);
 		}
 		// Reset session so next message creates a new one
 		this.modeManager.switchMode(this.modeManager.getCurrentMode());
@@ -307,13 +312,7 @@ export default class DshdianPlugin extends Plugin {
 
 	/** Handle show history request */
 	private handleShowHistory(): void {
-		// Placeholder: show a notice for now
-		const view = this.getChatView();
-		if (view) {
-			view.addMessage(
-				HarnessClient.buildMessage("system", "Chat history is not yet implemented.")
-			);
-		}
+		new Notice("聊天历史功能即将推出");
 	}
 
 	/** Handle add context request */

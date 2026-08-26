@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
 import { Mode } from "../types";
 import { renderMarkdown } from "./MarkdownRenderer";
 import type { ChatMessage, ToolCallInfo } from "../types";
@@ -19,6 +19,7 @@ export class ChatPanelView extends ItemView {
 	private composerEl: HTMLElement | null = null;
 	private modeBtn: HTMLElement | null = null;
 	private modelBtn: HTMLElement | null = null;
+	private contextMeterEl: HTMLElement | null = null;
 
 	/** The currently streaming assistant message element */
 	private streamingMsgEl: HTMLElement | null = null;
@@ -31,6 +32,12 @@ export class ChatPanelView extends ItemView {
 	/** Current mode and model */
 	private currentMode: Mode = Mode.Chat;
 	private currentModel = "deepseek-chat";
+
+	private static readonly MODE_DISPLAY_NAMES: Record<Mode, string> = {
+		[Mode.Chat]: "聊天",
+		[Mode.Butler]: "管家",
+		[Mode.Creator]: "创造",
+	};
 
 	private onSendMessage: ((content: string, refs: string[]) => void) | null = null;
 	private onModeChange: ((mode: Mode) => void) | null = null;
@@ -87,19 +94,19 @@ export class ChatPanelView extends ItemView {
 		spacer.style.flex = "1";
 
 		const newBtn = headerEl.createEl("button", {
-			cls: "dshdian-icon-btn",
+			cls: "clickable-icon dshdian-icon-btn",
 			attr: { "aria-label": "New chat", title: "New chat" },
 		});
-		newBtn.textContent = "✚";
+		setIcon(newBtn, "message-square-plus");
 		newBtn.addEventListener("click", () => {
 			if (this.onNewChat) this.onNewChat();
 		});
 
 		const histBtn = headerEl.createEl("button", {
-			cls: "dshdian-icon-btn",
+			cls: "clickable-icon dshdian-icon-btn",
 			attr: { "aria-label": "History", title: "History" },
 		});
-		histBtn.textContent = "☰";
+		setIcon(histBtn, "history");
 		histBtn.addEventListener("click", () => {
 			if (this.onShowHistory) this.onShowHistory();
 		});
@@ -144,38 +151,44 @@ export class ChatPanelView extends ItemView {
 
 		// [+] Add context
 		const addCtxBtn = toolbar.createEl("button", {
-			cls: "dshdian-toolbar-btn",
-			text: "+",
+			cls: "clickable-icon dshdian-toolbar-btn",
 			attr: { "aria-label": "Add context" },
 		});
+		setIcon(addCtxBtn, "plus");
 		addCtxBtn.addEventListener("click", () => {
 			if (this.onAddContext) this.onAddContext();
 		});
 
-		// Mode dropdown button
+		// Mode button - shows display name, click opens Menu
 		this.modeBtn = toolbar.createEl("button", {
-			cls: "dshdian-toolbar-btn",
-			text: this.modeBtnLabel(),
+			cls: "dshdian-toolbar-btn dshdian-agent-btn",
 		});
-		this.modeBtn.addEventListener("click", () => {
-			this.showModeMenu();
+		this.modeBtn.textContent = ChatPanelView.MODE_DISPLAY_NAMES[this.currentMode];
+		this.modeBtn.addEventListener("click", (e) => {
+			const menu = new Menu();
+			menu.addItem((item) => item.setTitle("聊天").onClick(() => this.onModeChange?.(Mode.Chat)));
+			menu.addItem((item) => item.setTitle("管家").onClick(() => this.onModeChange?.(Mode.Butler)));
+			menu.addItem((item) => item.setTitle("创造").onClick(() => this.onModeChange?.(Mode.Creator)));
+			menu.showAtMouseEvent(e as unknown as MouseEvent);
 		});
 
-		// Model dropdown button
+		// Model button - shows model name
 		this.modelBtn = toolbar.createEl("button", {
-			cls: "dshdian-toolbar-btn",
-			text: `Model: ${this.currentModel}`,
+			cls: "dshdian-toolbar-btn dshdian-model-btn",
 		});
-		this.modelBtn.addEventListener("click", () => {
-			this.showModelMenu();
-		});
+		this.modelBtn.textContent = this.currentModel;
 
 		// Spacer
 		toolbar.createEl("span", { cls: "dshdian-toolbar-spacer" });
 
+		// Context meter
+		this.contextMeterEl = toolbar.createEl("span", { cls: "dshdian-context-meter" });
+		setIcon(this.contextMeterEl, "gauge");
+		this.contextMeterEl.title = "Context: 0 / 50,000";
+
 		// Send button
-		const sendBtn = toolbar.createEl("button", { cls: "dshdian-send-btn" });
-		sendBtn.textContent = "↑";
+		const sendBtn = toolbar.createEl("button", { cls: "clickable-icon dshdian-send-btn" });
+		setIcon(sendBtn, "arrow-up");
 		sendBtn.addEventListener("click", () => {
 			this.handleSend();
 		});
@@ -190,6 +203,7 @@ export class ChatPanelView extends ItemView {
 		this.composerEl = null;
 		this.modeBtn = null;
 		this.modelBtn = null;
+		this.contextMeterEl = null;
 		this.streamingMsgEl = null;
 		this.streamingContentEl = null;
 		this.streamingText = "";
@@ -200,7 +214,7 @@ export class ChatPanelView extends ItemView {
 	setMode(mode: Mode): void {
 		this.currentMode = mode;
 		if (this.modeBtn) {
-			this.modeBtn.textContent = this.modeBtnLabel();
+			this.modeBtn.textContent = ChatPanelView.MODE_DISPLAY_NAMES[mode];
 		}
 	}
 
@@ -208,7 +222,7 @@ export class ChatPanelView extends ItemView {
 	setModel(model: string): void {
 		this.currentModel = model;
 		if (this.modelBtn) {
-			this.modelBtn.textContent = `Model: ${this.currentModel}`;
+			this.modelBtn.textContent = this.currentModel;
 		}
 	}
 
@@ -405,33 +419,18 @@ export class ChatPanelView extends ItemView {
 
 	// ─── Private helpers ───────────────────────────────────────────────
 
-	private modeBtnLabel(): string {
-		const name = this.currentMode.charAt(0).toUpperCase() + this.currentMode.slice(1);
-		return `Agent: ${name}`;
-	}
-
-	private showModeMenu(): void {
-		if (!this.modeBtn) return;
-		// Simple dropdown via native select behavior
-		const modes = Object.values(Mode);
-		const currentIndex = modes.indexOf(this.currentMode);
-		const nextIndex = (currentIndex + 1) % modes.length;
-		const newMode = modes[nextIndex];
-		this.currentMode = newMode;
-		this.modeBtn.textContent = this.modeBtnLabel();
-		if (this.onModeChange) this.onModeChange(newMode);
-	}
-
-	private showModelMenu(): void {
-		// Cycle through known models for now
-		const models = ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"];
-		const currentIndex = models.indexOf(this.currentModel);
-		const nextIndex = (currentIndex + 1) % models.length;
-		this.currentModel = models[nextIndex];
-		if (this.modelBtn) {
-			this.modelBtn.textContent = `Model: ${this.currentModel}`;
+	/** Update context meter display */
+	updateContextMeter(used: number, max: number): void {
+		if (!this.contextMeterEl) return;
+		const usedStr = used.toLocaleString();
+		const maxStr = max.toLocaleString();
+		this.contextMeterEl.title = `Context: ${usedStr} / ${maxStr}`;
+		// Change color when near limit (>80%)
+		if (used / max > 0.8) {
+			this.contextMeterEl.addClass("dshdian-context-meter-warn");
+		} else {
+			this.contextMeterEl.removeClass("dshdian-context-meter-warn");
 		}
-		if (this.onModelChange) this.onModelChange(this.currentModel);
 	}
 
 	private scrollToBottom(): void {
