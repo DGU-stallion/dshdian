@@ -9,7 +9,8 @@ import { PluginGenerator } from "./services/PluginGenerator";
 import { DshdianSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { Mode } from "./types";
 import type { DshdianSettings } from "./settings";
-import type { StreamEvent } from "./types";
+import type { StreamEvent, ApprovalDecision } from "./types";
+import { ApprovalLevel } from "./types";
 
 export default class DshdianPlugin extends Plugin {
 	settings: DshdianSettings = DEFAULT_SETTINGS;
@@ -36,7 +37,7 @@ export default class DshdianPlugin extends Plugin {
 		this.registerView(VIEW_TYPE_CHAT, (leaf: WorkspaceLeaf) => {
 			const view = new ChatPanelView(leaf);
 			view.setHandlers({
-				onSendMessage: (content) => this.handleSendMessage(content),
+				onSendMessage: (content, refs) => this.handleSendMessage(content, refs),
 				onModeChange: (mode) => this.handleModeChange(mode),
 				onGetSuggestions: (query) => this.referenceResolver.getSuggestions(query),
 			});
@@ -76,6 +77,8 @@ export default class DshdianPlugin extends Plugin {
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE_CHAT);
 		// Stop process monitoring
 		this.processManager.stop();
+		// Stop file watcher
+		this.pluginGenerator.stopWatching();
 	}
 
 	async loadSettings(): Promise<void> {
@@ -100,11 +103,13 @@ export default class DshdianPlugin extends Plugin {
 		if (leaf) {
 			await leaf.setViewState({ type: VIEW_TYPE_CHAT, active: true });
 			this.app.workspace.revealLeaf(leaf);
+			// Check for no-git warning after view is ready
+			this.checkNoGitWarning();
 		}
 	}
 
 	/** Handle message send from the chat panel */
-	private async handleSendMessage(content: string): Promise<void> {
+	private async handleSendMessage(content: string, pillRefs: string[]): Promise<void> {
 		const view = this.getChatView();
 		if (!view) return;
 
@@ -117,11 +122,20 @@ export default class DshdianPlugin extends Plugin {
 			return;
 		}
 
-		// Parse @references and build context
-		const refs = this.referenceResolver.parseReferences(content);
+		// Parse @references from text AND combine with pill-selected refs
+		const inlineRefs = this.referenceResolver.parseReferences(content);
+		const pillParsed = pillRefs.map((p): import("./types").Reference => ({
+			raw: p,
+			type: p.includes("/") ? "folder-note" : "note",
+			path: p,
+		}));
+		const allRefs = [...inlineRefs, ...pillParsed.filter(
+			(pr) => !inlineRefs.some((ir) => ir.path === pr.path)
+		)];
+
 		let context: string | undefined;
-		if (refs.length > 0) {
-			context = await this.referenceResolver.buildContext(refs);
+		if (allRefs.length > 0) {
+			context = await this.referenceResolver.buildContext(allRefs);
 		}
 
 		// Show user message in panel
@@ -168,7 +182,7 @@ export default class DshdianPlugin extends Plugin {
 						view.appendStreamToken(event.data);
 						break;
 					case "tool_call":
-						// Parse tool call event: show tool name as running
+						// Parse tool call event: intercept with approval strategy
 						try {
 							const info = JSON.parse(event.data);
 							currentToolName = info.name ?? info.tool ?? "unknown";
@@ -176,6 +190,8 @@ export default class DshdianPlugin extends Plugin {
 							currentToolName = event.data || "unknown";
 						}
 						view.addToolCall({ name: currentToolName!, status: "running" });
+						// Run approval check asynchronously
+						this.handleToolApproval(currentToolName!, view);
 						break;
 					case "tool_result":
 						// Tool completed — show result summary
@@ -214,13 +230,127 @@ export default class DshdianPlugin extends Plugin {
 		);
 	}
 
+	/** Intercept a tool call with the approval strategy */
+	private async handleToolApproval(toolName: string, view: ChatPanelView): Promise<void> {
+		const decision = await this.approvalStrategy.getDecision(toolName);
+		switch (decision.level) {
+			case ApprovalLevel.Silent:
+				// Pass through
+				break;
+			case ApprovalLevel.Notify:
+				view.showNotification(decision.description);
+				break;
+			case ApprovalLevel.Confirm: {
+				const approved = await view.showApprovalRequest(decision.action, decision.description);
+				if (!approved) {
+					view.addMessage(
+						HarnessClient.buildMessage("system", `Rejected: ${toolName}`)
+					);
+					// Abort the stream since the tool was rejected
+					this.client.abort();
+				}
+				break;
+			}
+		}
+	}
+
+	/** Check for no-git and show warning banner */
+	private async checkNoGitWarning(): Promise<void> {
+		const hasGit = await this.approvalStrategy.isGitRepo();
+		if (!hasGit) {
+			const view = this.getChatView();
+			if (view) view.showNoGitWarning();
+		}
+	}
+
 	/** Handle mode switch from the chat panel */
 	private async handleModeChange(mode: Mode): Promise<void> {
 		const view = this.getChatView();
 		if (view) {
 			view.clearMessages();
+			view.setMode(mode);
 		}
 		await this.modeManager.switchMode(mode);
+
+		// Start/stop generated dir watcher for Creator mode
+		if (mode === Mode.Creator) {
+			this.pluginGenerator.watchGeneratedDir((pluginName) => {
+				this.handleGeneratedFileChange(pluginName);
+			});
+		} else {
+			this.pluginGenerator.stopWatching();
+		}
+	}
+
+	/** Handle file change in generated dir: auto-compile and show preview UI */
+	private async handleGeneratedFileChange(pluginName: string): Promise<void> {
+		const view = this.getChatView();
+		if (!view) return;
+
+		try {
+			const compiled = await this.pluginGenerator.compileGenerated(pluginName);
+			if (!compiled) return;
+
+			// Hot-reload preview
+			await this.pluginGenerator.hotReloadPreview(pluginName);
+
+			// Show preview state UI
+			view.showPreviewState(pluginName, {
+				onInstall: () => this.handlePreviewInstall(pluginName),
+				onRetry: () => this.handlePreviewRetry(),
+				onAbandon: () => this.handlePreviewAbandon(pluginName),
+			});
+		} catch (e) {
+			view.addMessage(
+				HarnessClient.buildMessage("system", `Compile failed for ${pluginName}: ${String(e)}`)
+			);
+		}
+	}
+
+	private async handlePreviewInstall(pluginName: string): Promise<void> {
+		const view = this.getChatView();
+		try {
+			await this.pluginGenerator.installPlugin(pluginName, pluginName);
+			if (view) {
+				view.addMessage(
+					HarnessClient.buildMessage("system", `Plugin "${pluginName}" installed and enabled.`)
+				);
+			}
+		} catch (e) {
+			if (view) {
+				view.addMessage(
+					HarnessClient.buildMessage("system", `Install failed: ${String(e)}`)
+				);
+			}
+		}
+	}
+
+	private handlePreviewRetry(): void {
+		// Retry = continue the conversation. Nothing to do — user can keep chatting.
+		const view = this.getChatView();
+		if (view) {
+			view.addMessage(
+				HarnessClient.buildMessage("system", "Continuing conversation. Describe your changes.")
+			);
+		}
+	}
+
+	private async handlePreviewAbandon(pluginName: string): Promise<void> {
+		const view = this.getChatView();
+		try {
+			await this.pluginGenerator.abandonPreview(pluginName);
+			if (view) {
+				view.addMessage(
+					HarnessClient.buildMessage("system", `Preview "${pluginName}" abandoned and cleaned up.`)
+				);
+			}
+		} catch (e) {
+			if (view) {
+				view.addMessage(
+					HarnessClient.buildMessage("system", `Abandon failed: ${String(e)}`)
+				);
+			}
+		}
 	}
 
 	private getChatView(): ChatPanelView | null {

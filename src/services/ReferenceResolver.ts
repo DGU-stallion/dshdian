@@ -64,21 +64,44 @@ export class ReferenceResolver {
 		return { ref, content };
 	}
 
-	/** Get autocomplete suggestions for a partial query */
+	/** Get autocomplete suggestions for a partial query (fuzzy match) */
 	getSuggestions(query: string): string[] {
 		const lower = query.toLowerCase();
 		const files = this.app.vault.getMarkdownFiles();
-		const results: string[] = [];
+		const results: { path: string; score: number }[] = [];
 
 		for (const file of files) {
 			const name = file.basename.toLowerCase();
-			const path = file.path.toLowerCase().replace(/\.md$/, "");
-			if (name.startsWith(lower) || path.includes(lower)) {
-				results.push(file.path.replace(/\.md$/, ""));
+			const filePath = file.path.replace(/\.md$/, "");
+			const pathLower = filePath.toLowerCase();
+
+			// Fuzzy match: all query chars appear in order
+			const score = this.fuzzyScore(lower, name) ?? this.fuzzyScore(lower, pathLower);
+			if (score !== null) {
+				results.push({ path: filePath, score });
 			}
-			if (results.length >= 10) break;
+			if (results.length >= 20) break;
 		}
-		return results;
+
+		// Sort by score (lower = better match) and take top 10
+		results.sort((a, b) => a.score - b.score);
+		return results.slice(0, 10).map((r) => r.path);
+	}
+
+	/** Fuzzy score: returns match score (lower = better) or null if no match */
+	private fuzzyScore(query: string, target: string): number | null {
+		let qi = 0;
+		let score = 0;
+		let lastMatchIdx = -1;
+		for (let ti = 0; ti < target.length && qi < query.length; ti++) {
+			if (target[ti] === query[qi]) {
+				// Consecutive matches score better
+				score += (lastMatchIdx === ti - 1) ? 0 : (ti - lastMatchIdx);
+				lastMatchIdx = ti;
+				qi++;
+			}
+		}
+		return qi === query.length ? score : null;
 	}
 
 	/** Build context string from multiple resolved references */

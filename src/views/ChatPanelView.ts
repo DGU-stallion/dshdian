@@ -12,14 +12,18 @@ export const VIEW_TYPE_CHAT = "dshdian-chat-view";
 export class ChatPanelView extends ItemView {
 	private messageListEl: HTMLElement | null = null;
 	private inputEl: HTMLTextAreaElement | null = null;
-	private modeSelectEl: HTMLSelectElement | null = null;
+	private modeButtonsEl: HTMLElement | null = null;
 	private suggestionsEl: HTMLElement | null = null;
 	private statusEl: HTMLElement | null = null;
+	private pillContainerEl: HTMLElement | null = null;
 
 	/** The currently streaming assistant message element (for in-place updates) */
 	private streamingMsgEl: HTMLElement | null = null;
 
-	private onSendMessage: ((content: string) => void) | null = null;
+	/** Selected file references shown as pills */
+	private selectedRefs: string[] = [];
+
+	private onSendMessage: ((content: string, refs: string[]) => void) | null = null;
 	private onModeChange: ((mode: Mode) => void) | null = null;
 	private onGetSuggestions: ((query: string) => string[]) | null = null;
 
@@ -37,7 +41,7 @@ export class ChatPanelView extends ItemView {
 
 	/** Register external handlers */
 	setHandlers(handlers: {
-		onSendMessage: (content: string) => void;
+		onSendMessage: (content: string, refs: string[]) => void;
 		onModeChange: (mode: Mode) => void;
 		onGetSuggestions: (query: string) => string[];
 	}): void {
@@ -51,20 +55,23 @@ export class ChatPanelView extends ItemView {
 		container.empty();
 		container.addClass("dshdian-chat-container");
 
-		// Header with mode selector + status
+		// Header with mode buttons + status
 		const headerEl = container.createDiv({ cls: "dshdian-header" });
-		this.modeSelectEl = headerEl.createEl("select", { cls: "dshdian-mode-select" });
+		this.modeButtonsEl = headerEl.createDiv({ cls: "dshdian-mode-buttons" });
 		for (const mode of Object.values(Mode)) {
-			this.modeSelectEl.createEl("option", {
-				value: mode,
+			const btn = this.modeButtonsEl.createEl("button", {
+				cls: "dshdian-mode-btn",
 				text: mode.charAt(0).toUpperCase() + mode.slice(1),
+				attr: { "data-mode": mode },
+			});
+			btn.addEventListener("click", () => {
+				if (this.onModeChange) {
+					this.onModeChange(mode);
+				}
 			});
 		}
-		this.modeSelectEl.addEventListener("change", () => {
-			if (this.modeSelectEl && this.onModeChange) {
-				this.onModeChange(this.modeSelectEl.value as Mode);
-			}
-		});
+		// Highlight first mode by default
+		this.highlightModeButton(Mode.Chat);
 
 		this.statusEl = headerEl.createEl("span", { cls: "dshdian-status", text: "" });
 
@@ -73,6 +80,7 @@ export class ChatPanelView extends ItemView {
 
 		// Input area
 		const inputArea = container.createDiv({ cls: "dshdian-input-area" });
+		this.pillContainerEl = inputArea.createDiv({ cls: "dshdian-pill-container" });
 		this.inputEl = inputArea.createEl("textarea", {
 			cls: "dshdian-input",
 			attr: { placeholder: "Type a message... (@mention to reference files)", rows: "3" },
@@ -100,17 +108,30 @@ export class ChatPanelView extends ItemView {
 	async onClose(): Promise<void> {
 		this.messageListEl = null;
 		this.inputEl = null;
-		this.modeSelectEl = null;
+		this.modeButtonsEl = null;
 		this.suggestionsEl = null;
 		this.statusEl = null;
+		this.pillContainerEl = null;
 		this.streamingMsgEl = null;
+		this.selectedRefs = [];
 	}
 
-	/** Set the active mode in the dropdown */
+	/** Set the active mode and highlight the corresponding button */
 	setMode(mode: Mode): void {
-		if (this.modeSelectEl) {
-			this.modeSelectEl.value = mode;
-		}
+		this.highlightModeButton(mode);
+	}
+
+	private highlightModeButton(mode: Mode): void {
+		if (!this.modeButtonsEl) return;
+		const buttons = this.modeButtonsEl.querySelectorAll(".dshdian-mode-btn");
+		buttons.forEach((btn) => {
+			const el = btn as HTMLElement;
+			if (el.dataset.mode === mode) {
+				el.addClass("dshdian-mode-active");
+			} else {
+				el.removeClass("dshdian-mode-active");
+			}
+		});
 	}
 
 	/** Update connection status display */
@@ -215,6 +236,82 @@ export class ChatPanelView extends ItemView {
 		this.streamingMsgEl = null;
 	}
 
+	/** Show persistent no-git warning banner at the top of the panel */
+	showNoGitWarning(): void {
+		if (!this.messageListEl) return;
+		// Don't add duplicate warning
+		if (this.messageListEl.querySelector(".dshdian-no-git-warning")) return;
+		const banner = document.createElement("div");
+		banner.className = "dshdian-no-git-warning";
+		banner.textContent = "⚠️ No git repository detected — all write operations will require confirmation.";
+		this.messageListEl.insertBefore(banner, this.messageListEl.firstChild);
+	}
+
+	/** Show inline approval request with Approve/Reject buttons. Returns promise resolving to user choice. */
+	showApprovalRequest(action: string, description: string): Promise<boolean> {
+		return new Promise((resolve) => {
+			if (!this.messageListEl) {
+				resolve(false);
+				return;
+			}
+			const el = this.messageListEl.createDiv({ cls: "dshdian-approval-request" });
+			el.createEl("div", { cls: "dshdian-approval-desc", text: description });
+			const btnRow = el.createDiv({ cls: "dshdian-approval-buttons" });
+			const approveBtn = btnRow.createEl("button", { cls: "dshdian-approve-btn", text: "Approve" });
+			const rejectBtn = btnRow.createEl("button", { cls: "dshdian-reject-btn", text: "Reject" });
+			approveBtn.addEventListener("click", () => {
+				el.remove();
+				resolve(true);
+			});
+			rejectBtn.addEventListener("click", () => {
+				el.remove();
+				resolve(false);
+			});
+			this.scrollToBottom();
+		});
+	}
+
+	/** Show a transient notification in the message list (for Notify level) */
+	showNotification(text: string): void {
+		if (!this.messageListEl) return;
+		const el = this.messageListEl.createDiv({ cls: "dshdian-notification" });
+		el.textContent = text;
+		this.scrollToBottom();
+	}
+
+	/** Show preview state banner with Install/Retry/Abandon buttons */
+	showPreviewState(
+		pluginName: string,
+		callbacks: { onInstall: () => void; onRetry: () => void; onAbandon: () => void }
+	): void {
+		if (!this.messageListEl) return;
+		// Remove any existing preview banner
+		const existing = this.messageListEl.querySelector(".dshdian-preview-state");
+		if (existing) existing.remove();
+
+		const el = this.messageListEl.createDiv({ cls: "dshdian-preview-state" });
+		el.createEl("span", { cls: "dshdian-preview-label", text: `Preview: ${pluginName}` });
+		const btnRow = el.createDiv({ cls: "dshdian-preview-buttons" });
+
+		const installBtn = btnRow.createEl("button", { cls: "dshdian-preview-install-btn", text: "Install" });
+		const retryBtn = btnRow.createEl("button", { cls: "dshdian-preview-retry-btn", text: "Retry" });
+		const abandonBtn = btnRow.createEl("button", { cls: "dshdian-preview-abandon-btn", text: "Abandon" });
+
+		installBtn.addEventListener("click", () => {
+			el.remove();
+			callbacks.onInstall();
+		});
+		retryBtn.addEventListener("click", () => {
+			el.remove();
+			callbacks.onRetry();
+		});
+		abandonBtn.addEventListener("click", () => {
+			el.remove();
+			callbacks.onAbandon();
+		});
+		this.scrollToBottom();
+	}
+
 	/** Disable/enable input during streaming */
 	setInputEnabled(enabled: boolean): void {
 		if (this.inputEl) {
@@ -231,9 +328,11 @@ export class ChatPanelView extends ItemView {
 	private handleSend(): void {
 		if (!this.inputEl || !this.onSendMessage) return;
 		const content = this.inputEl.value.trim();
-		if (content.length === 0) return;
-		this.onSendMessage(content);
+		if (content.length === 0 && this.selectedRefs.length === 0) return;
+		this.onSendMessage(content, [...this.selectedRefs]);
 		this.inputEl.value = "";
+		this.selectedRefs = [];
+		if (this.pillContainerEl) this.pillContainerEl.empty();
 		this.hideSuggestions();
 	}
 
@@ -283,11 +382,27 @@ export class ChatPanelView extends ItemView {
 		const after = text.slice(cursorPos);
 		const atMatch = before.match(/@([#\w\-/]*)$/);
 		if (atMatch && atMatch.index !== undefined) {
-			const newBefore = before.slice(0, atMatch.index) + "@" + item + " ";
+			// Remove the @query from textarea
+			const newBefore = before.slice(0, atMatch.index);
 			this.inputEl.value = newBefore + after;
 			this.inputEl.selectionStart = newBefore.length;
 			this.inputEl.selectionEnd = newBefore.length;
 		}
+		// Add as pill if not already selected
+		if (!this.selectedRefs.includes(item)) {
+			this.selectedRefs.push(item);
+			this.addPill(item);
+		}
 		this.hideSuggestions();
+	}
+
+	private addPill(ref: string): void {
+		if (!this.pillContainerEl) return;
+		const pill = this.pillContainerEl.createEl("span", { cls: "dshdian-ref-pill", text: ref });
+		const closeBtn = pill.createEl("span", { cls: "dshdian-ref-pill-close", text: "×" });
+		closeBtn.addEventListener("click", () => {
+			this.selectedRefs = this.selectedRefs.filter((r) => r !== ref);
+			pill.remove();
+		});
 	}
 }

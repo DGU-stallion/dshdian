@@ -1,91 +1,82 @@
 import { App } from "obsidian";
-import { ApprovalLevel, ActionRisk } from "../types";
+import { ApprovalLevel } from "../types";
+import type { ApprovalDecision } from "../types";
 import { getVaultPath } from "../utils";
 import * as fs from "fs";
 import * as path from "path";
 import { exec } from "child_process";
 
+/** Actions that ALWAYS require confirmation regardless of git state */
+const ALWAYS_CONFIRM_ACTIONS = ["delete", "remove", "plugin_install", "plugin_uninstall", "system"];
+
+/** Actions considered read-only (always silent) */
+const READ_ACTIONS = ["read", "search", "list", "tags", "backlinks", "stat"];
+
 /**
  * Git-aware approval strategy.
- * Determines whether actions require user confirmation based on
- * the vault's git state and the action's risk level.
+ * Three levels: Silent (read ops), Notify (git + write), Confirm (no git + write, or dangerous ops).
  */
 export class ApprovalStrategy {
 	private app: App;
 	private vaultPath: string;
+	private hasGit: boolean | null = null;
 
 	constructor(app: App) {
 		this.app = app;
 		this.vaultPath = getVaultPath(app);
 	}
 
-	/** Determine current approval level based on git state */
-	async getApprovalLevel(): Promise<ApprovalLevel> {
-		const hasGit = await this.isGitRepo();
-		if (!hasGit) {
-			return ApprovalLevel.ConfirmAll;
-		}
-		const dirty = await this.isDirty();
-		return dirty ? ApprovalLevel.ConfirmRisky : ApprovalLevel.Auto;
-	}
-
 	/** Check if vault root has a .git directory */
 	async isGitRepo(): Promise<boolean> {
+		if (this.hasGit !== null) return this.hasGit;
 		const gitDir = path.join(this.vaultPath, ".git");
 		return new Promise((resolve) => {
 			fs.access(gitDir, fs.constants.F_OK, (err) => {
-				resolve(!err);
+				this.hasGit = !err;
+				resolve(this.hasGit);
 			});
 		});
 	}
 
-	/** Check if worktree has uncommitted changes */
-	async isDirty(): Promise<boolean> {
-		return new Promise((resolve) => {
-			exec(
-				"git status --porcelain",
-				{ cwd: this.vaultPath },
-				(err, stdout) => {
-					if (err) {
-						// If git command fails, treat as dirty
-						resolve(true);
-						return;
-					}
-					resolve(stdout.trim().length > 0);
-				}
-			);
-		});
-	}
-
-	/**
-	 * Decide if an action requires user approval.
-	 * Returns true if confirmation is needed.
-	 */
-	async shouldRequireApproval(action: ActionRisk): Promise<boolean> {
-		const level = await this.getApprovalLevel();
-
-		switch (level) {
-			case ApprovalLevel.Auto:
-				// Clean git repo: only high-risk actions need approval
-				return action === ActionRisk.High;
-			case ApprovalLevel.ConfirmRisky:
-				// Dirty worktree: medium and high need approval
-				return action === ActionRisk.Medium || action === ActionRisk.High;
-			case ApprovalLevel.ConfirmAll:
-				// No git: everything except reads needs approval
-				return action !== ActionRisk.Low;
-		}
-	}
-
-	/** Classify an action string into a risk level */
-	static classifyRisk(action: string): ActionRisk {
+	/** Determine approval decision for a given action */
+	async getDecision(action: string): Promise<ApprovalDecision> {
 		const lower = action.toLowerCase();
-		if (lower.includes("delete") || lower.includes("remove") || lower.includes("plugin")) {
-			return ActionRisk.High;
+
+		// Read ops are always silent
+		if (READ_ACTIONS.some((r) => lower.includes(r))) {
+			return { level: ApprovalLevel.Silent, action, description: action };
 		}
-		if (lower.includes("write") || lower.includes("modify") || lower.includes("create") || lower.includes("move")) {
-			return ActionRisk.Medium;
+
+		// Permanent delete and system ops ALWAYS confirm
+		if (ALWAYS_CONFIRM_ACTIONS.some((a) => lower.includes(a))) {
+			return {
+				level: ApprovalLevel.Confirm,
+				action,
+				description: `Dangerous operation: ${action}`,
+			};
 		}
-		return ActionRisk.Low;
+
+		// Write operations: check git state
+		const hasGit = await this.isGitRepo();
+		if (hasGit) {
+			// Has git — notify only
+			return {
+				level: ApprovalLevel.Notify,
+				action,
+				description: `Executed: ${action}`,
+			};
+		}
+
+		// No git — all writes require confirmation
+		return {
+			level: ApprovalLevel.Confirm,
+			action,
+			description: `No git backup. Confirm: ${action}`,
+		};
+	}
+
+	/** Reset cached git state (call if vault changes) */
+	resetCache(): void {
+		this.hasGit = null;
 	}
 }

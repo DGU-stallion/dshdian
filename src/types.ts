@@ -18,6 +18,7 @@ export interface ModeConfig {
 	mode: Mode;
 	systemPrompt: string;
 	permission: Permission;
+	toolWhitelist: string[];
 }
 
 /** Chat message */
@@ -45,12 +46,19 @@ export interface ToolCallInfo {
 
 /** Approval levels based on git state */
 export enum ApprovalLevel {
-	/** Has git, worktree clean — risky actions auto-approved */
-	Auto = "auto",
-	/** Has git, worktree dirty — risky actions need confirmation */
-	ConfirmRisky = "confirm-risky",
-	/** No git — all mutating actions need confirmation */
-	ConfirmAll = "confirm-all",
+	/** Read operations — pass through silently */
+	Silent = "silent",
+	/** Write ops with git — show notification */
+	Notify = "notify",
+	/** Requires inline approve/reject buttons */
+	Confirm = "confirm",
+}
+
+/** Decision returned by the approval strategy */
+export interface ApprovalDecision {
+	level: ApprovalLevel;
+	action: string;
+	description: string;
 }
 
 /** Action risk classification */

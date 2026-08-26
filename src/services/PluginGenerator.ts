@@ -5,6 +5,7 @@ import * as fs from "fs";
 import type { PluginSpec } from "../types";
 
 const PREVIEW_DIR = "_dshdian_preview";
+const GENERATED_DIR = ".obsidian/plugins/dshdian/generated";
 
 /**
  * Generates, compiles, previews, and installs Obsidian plugins
@@ -13,10 +14,17 @@ const PREVIEW_DIR = "_dshdian_preview";
 export class PluginGenerator {
 	private app: App;
 	private vaultPath: string;
+	private watcher: fs.FSWatcher | null = null;
+	private onFileChange: ((pluginName: string) => void) | null = null;
 
 	constructor(app: App) {
 		this.app = app;
 		this.vaultPath = getVaultPath(app);
+	}
+
+	/** Get the absolute path to the generated directory */
+	getGeneratedDir(): string {
+		return path.join(this.vaultPath, GENERATED_DIR);
 	}
 
 	/** Create TypeScript source files from an AI-produced spec */
@@ -87,18 +95,37 @@ export class PluginGenerator {
 		return pluginDir;
 	}
 
-	/** Install: move from preview to .obsidian/plugins/ */
-	async installPlugin(id: string): Promise<void> {
-		const srcDir = path.join(this.vaultPath, PREVIEW_DIR, id);
-		const destDir = path.join(this.vaultPath, ".obsidian", "plugins", id);
-
+	/** Install: move from generated dir to final .obsidian/plugins/{finalName} */
+	async installPlugin(id: string, finalName?: string): Promise<void> {
+		const targetId = finalName ?? id;
+		// Try generated dir first, then preview dir
+		let srcDir = path.join(this.vaultPath, GENERATED_DIR, id);
 		if (!fs.existsSync(srcDir)) {
-			throw new Error(`Preview plugin ${id} not found`);
+			srcDir = path.join(this.vaultPath, PREVIEW_DIR, id);
+		}
+		if (!fs.existsSync(srcDir)) {
+			throw new Error(`Plugin ${id} not found`);
 		}
 
+		const destDir = path.join(this.vaultPath, ".obsidian", "plugins", targetId);
 		await this.ensureDir(destDir);
 		this.copyDirSync(srcDir, destDir);
+
+		// Update manifest id if finalName differs
+		if (finalName && finalName !== id) {
+			const manifestPath = path.join(destDir, "manifest.json");
+			if (fs.existsSync(manifestPath)) {
+				const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+				manifest.id = finalName;
+				fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+			}
+		}
+
 		this.removeDirSync(srcDir);
+
+		// Enable the plugin via Obsidian API
+		await (this.app as any).plugins.loadManifests();
+		await (this.app as any).plugins.enablePluginAndSave(targetId);
 	}
 
 	/** Remove preview directory for a plugin */
@@ -107,6 +134,70 @@ export class PluginGenerator {
 		if (fs.existsSync(dir)) {
 			this.removeDirSync(dir);
 		}
+	}
+
+	/** Watch the generated directory for file changes */
+	watchGeneratedDir(onChange: (pluginName: string) => void): void {
+		this.onFileChange = onChange;
+		const genDir = path.join(this.vaultPath, GENERATED_DIR);
+		this.ensureDirSync(genDir);
+		try {
+			this.watcher = fs.watch(genDir, { recursive: true }, (_eventType, filename) => {
+				if (!filename || !this.onFileChange) return;
+				// Extract plugin name from path (first segment)
+				const pluginName = filename.split(path.sep)[0];
+				if (pluginName) {
+					this.onFileChange(pluginName);
+				}
+			});
+		} catch (e) {
+			console.warn("dshdian: failed to watch generated dir", e);
+		}
+	}
+
+	/** Stop watching the generated directory */
+	stopWatching(): void {
+		if (this.watcher) {
+			this.watcher.close();
+			this.watcher = null;
+		}
+		this.onFileChange = null;
+	}
+
+	/** Hot-reload a preview plugin via Obsidian's internal API */
+	async hotReloadPreview(id: string): Promise<void> {
+		await (this.app as any).plugins.loadManifests();
+		try {
+			await (this.app as any).plugins.enablePluginAndSave(id);
+		} catch (e) {
+			console.warn("dshdian: hot-reload failed for", id, e);
+		}
+	}
+
+	/** Abandon a preview: disable plugin and remove generated files */
+	async abandonPreview(id: string): Promise<void> {
+		// Disable if loaded
+		try {
+			await (this.app as any).plugins.disablePluginAndSave(id);
+		} catch {
+			// May not be loaded
+		}
+		// Remove from generated dir
+		const genDir = path.join(this.vaultPath, GENERATED_DIR, id);
+		if (fs.existsSync(genDir)) {
+			this.removeDirSync(genDir);
+		}
+		// Remove from preview dir
+		const previewDir = path.join(this.vaultPath, PREVIEW_DIR, id);
+		if (fs.existsSync(previewDir)) {
+			this.removeDirSync(previewDir);
+		}
+	}
+
+	/** Compile a plugin from the generated directory */
+	async compileGenerated(id: string): Promise<boolean> {
+		const pluginDir = path.join(this.vaultPath, GENERATED_DIR, id);
+		return this.compilePlugin(pluginDir);
 	}
 
 	/** Scaffold a minimal plugin template */
@@ -146,6 +237,12 @@ export default class ${this.toPascalCase(name)}Plugin extends Plugin {
 	}
 
 	private async ensureDir(dir: string): Promise<void> {
+		if (!fs.existsSync(dir)) {
+			fs.mkdirSync(dir, { recursive: true });
+		}
+	}
+
+	private ensureDirSync(dir: string): void {
 		if (!fs.existsSync(dir)) {
 			fs.mkdirSync(dir, { recursive: true });
 		}
