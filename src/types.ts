@@ -28,10 +28,10 @@ export interface ChatMessage {
 	timestamp: number;
 }
 
-/** SSE/WebSocket event types from the harness */
+/** SSE/WebSocket event types — legacy, kept for ToolCallInfo compatibility */
 export type StreamEventType = "message" | "tool_call" | "tool_result" | "done" | "error";
 
-/** Parsed streaming event */
+/** Parsed streaming event — legacy, kept for compatibility */
 export interface StreamEvent {
 	type: StreamEventType;
 	data: string;

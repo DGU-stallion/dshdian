@@ -552,4 +552,54 @@ export class ChatPanelView extends ItemView {
 			pill.remove();
 		});
 	}
+
+	// ─── History list ──────────────────────────────────────────────────
+
+	/** Show a dropdown list of sessions. Returns the selected sessionId or null. */
+	showHistoryList(
+		sessions: Array<{ sessionId: string; title: string; time: string; active: boolean }>,
+		onSelect: (sessionId: string) => void
+	): void {
+		// Remove existing dropdown if any
+		const container = this.containerEl.children[1] as HTMLElement;
+		const existing = container.querySelector(".dshdian-history-overlay");
+		if (existing) existing.remove();
+
+		const overlay = container.createDiv({ cls: "dshdian-history-overlay" });
+		const panel = overlay.createDiv({ cls: "dshdian-history-panel" });
+
+		// Header
+		const header = panel.createDiv({ cls: "dshdian-history-header" });
+		header.createEl("span", { text: "会话历史" });
+		const closeBtn = header.createEl("button", {
+			cls: "clickable-icon dshdian-history-close",
+			attr: { "aria-label": "Close" },
+		});
+		setIcon(closeBtn, "x");
+		closeBtn.addEventListener("click", () => overlay.remove());
+
+		// Session list
+		const list = panel.createDiv({ cls: "dshdian-history-list" });
+
+		if (sessions.length === 0) {
+			list.createDiv({ cls: "dshdian-history-empty", text: "暂无历史会话" });
+		} else {
+			for (const s of sessions) {
+				const item = list.createDiv({
+					cls: `dshdian-history-item ${s.active ? "dshdian-history-item-active" : ""}`,
+				});
+				item.createDiv({ cls: "dshdian-history-title", text: s.title });
+				item.createDiv({ cls: "dshdian-history-time", text: s.time });
+				item.addEventListener("click", () => {
+					overlay.remove();
+					onSelect(s.sessionId);
+				});
+			}
+		}
+
+		// Click overlay to close
+		overlay.addEventListener("click", (e) => {
+			if (e.target === overlay) overlay.remove();
+		});
+	}
 }

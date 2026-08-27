@@ -118,4 +118,9 @@ export class ModeManager extends Events {
 	clearSession(): void {
 		this.sessionId = null;
 	}
+
+	/** Set session ID directly (for switching to an existing session) */
+	setSessionId(sessionId: string): void {
+		this.sessionId = sessionId;
+	}
 }

@@ -80,6 +80,8 @@
 	font-size: 16px;
 	line-height: 28px;
 	word-wrap: break-word;
+	user-select: text;
+	-webkit-user-select: text;
 }
 
 /* ====== User bubble ====== */
@@ -185,6 +187,8 @@
 	color: var(--text-muted);
 	white-space: pre-wrap;
 	font-family: var(--font-monospace);
+	user-select: text;
+	-webkit-user-select: text;
 }
 
 .dshdian-tool-call.dshdian-tool-expanded + .dshdian-tool-detail {
@@ -526,4 +530,85 @@
 .dshdian-preview-retry-btn:hover,
 .dshdian-preview-abandon-btn:hover {
 	opacity: 0.9;
+}
+
+/* ====== History overlay ====== */
+.dshdian-history-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.4);
+	z-index: 100;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	padding-top: 40px;
+}
+
+.dshdian-history-panel {
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	width: 90%;
+	max-width: 400px;
+	max-height: 60vh;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.dshdian-history-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-weight: 600;
+}
+
+.dshdian-history-close {
+	padding: 4px;
+}
+
+.dshdian-history-list {
+	overflow-y: auto;
+	flex: 1;
+}
+
+.dshdian-history-empty {
+	padding: 24px;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.dshdian-history-item {
+	padding: 10px 16px;
+	cursor: pointer;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.dshdian-history-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.dshdian-history-item-active {
+	background: var(--background-modifier-active-hover);
+	border-left: 3px solid var(--interactive-accent);
+}
+
+.dshdian-history-title {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dshdian-history-time {
+	font-size: 11px;
+	color: var(--text-muted);
+	margin-top: 2px;
 }

@@ -54,34 +54,71 @@ export class DshProcessManager extends Events {
 		return null;
 	}
 
-	/** Ensure the dshdian profile exists and has web-app bundle */
-	private ensureProfile(dshBin: string): void {
+	/**
+	 * Ensure the dshdian profile exists with the correct bundle list.
+	 * DSH resolves bundles from its own installAnchor first, so we only need
+	 * the profile directory structure + package.json with the right bundles.
+	 * No `dsh plugin` call or pnpm install needed.
+	 */
+	private ensureProfile(): void {
 		const profileDir = join(this.dshHome, "profiles", PROFILE_NAME);
 		const pkgPath = join(profileDir, "package.json");
 
-		// Initialize profile if it doesn't exist
-		if (!existsSync(pkgPath)) {
-			try {
-				execSync(`"${dshBin}" plugin --profile ${PROFILE_NAME} --help`, {
-					encoding: "utf-8",
-					timeout: 15000,
-					stdio: "ignore",
-				});
-			} catch {
-				// --help exits non-zero but still creates the profile
-			}
-		}
+		// Required bundles (mirrors DSH's built-in "web" profile template)
+		const requiredBundles = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
 
-		// Ensure web-app bundle is in the profile
-		if (existsSync(pkgPath)) {
+		if (!existsSync(pkgPath)) {
+			// Create profile directory structure from scratch
+			const { mkdirSync } = require("fs") as typeof import("fs");
+			mkdirSync(profileDir, { recursive: true });
+
+			const pkg = {
+				name: `dsh-profile-${PROFILE_NAME}`,
+				private: true,
+				dependencies: {},
+				dsh: { profile: { bundles: requiredBundles } },
+			};
+			writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), "utf-8");
+
+			// cordis.yml — empty root (bundles compose via patch layers)
+			const cordisRoot = join(profileDir, "cordis.yml");
+			if (!existsSync(cordisRoot)) {
+				writeFileSync(cordisRoot, [
+					"# dsh profile root — an empty entry list. The tree is composed as patches:",
+					"# each bundle in package.json's dsh.profile.bundles, then cordis.patch.yml, then any",
+					"# --patch overlays. Edit cordis.patch.yml, not this file.",
+					"[]",
+					"",
+				].join("\n"), "utf-8");
+			}
+
+			// cordis.patch.yml — user override layer (empty)
+			const patchPath = join(profileDir, "cordis.patch.yml");
+			if (!existsSync(patchPath)) {
+				writeFileSync(patchPath, [
+					"# Your patch layer for this dsh profile, applied after every bundle layer:",
+					"# a top-level YAML array of loader patch entries (id-targeted config",
+					"# overrides, disables, and insert lists; `!!js` expressions allowed).",
+					"[]",
+					"",
+				].join("\n"), "utf-8");
+			}
+
+			// pnpm-workspace.yaml (required by pnpm if user later adds plugins)
+			const workspacePath = join(profileDir, "pnpm-workspace.yaml");
+			if (!existsSync(workspacePath)) {
+				writeFileSync(workspacePath, "packages: []\n", "utf-8");
+			}
+		} else {
+			// Profile exists — ensure bundles list is correct
 			try {
 				const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
 				const bundles: string[] = pkg?.dsh?.profile?.bundles ?? [];
-				if (!bundles.includes("@deepseek-ai/dsh-web-app")) {
-					bundles.push("@deepseek-ai/dsh-web-app");
+				const missing = requiredBundles.filter(b => !bundles.includes(b));
+				if (missing.length > 0) {
 					if (!pkg.dsh) pkg.dsh = {};
 					if (!pkg.dsh.profile) pkg.dsh.profile = {};
-					pkg.dsh.profile.bundles = bundles;
+					pkg.dsh.profile.bundles = requiredBundles;
 					writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), "utf-8");
 				}
 			} catch (e) {
@@ -111,7 +148,7 @@ export class DshProcessManager extends Events {
 		}
 
 		// Ensure profile exists
-		this.ensureProfile(dshBin);
+		this.ensureProfile();
 
 		// Start DSH with dshdian profile
 		try {
