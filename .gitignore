@@ -18,3 +18,7 @@ data.json
 
 # Generated plugin preview (temporary)
 _dshdian_preview/
+
+# Kiro CLI local config
+.kiro/skills/
+skills-lock.json
