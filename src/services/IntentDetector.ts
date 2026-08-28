@@ -2,24 +2,34 @@ import { Mode } from "../types";
 
 /** Keywords/patterns that indicate write intent */
 const WRITE_INTENT_PATTERNS = [
-	/\b(create|创建|新建)\b/i,
-	/\b(delete|删除|移除|remove)\b/i,
-	/\b(rename|重命名|改名)\b/i,
-	/\b(move|移动|迁移)\b/i,
-	/\b(write|写入|覆盖|overwrite)\b/i,
-	/\b(organize|整理|归档|archive)\b/i,
-	/\b(modify|修改|编辑|edit|update|更新)\b/i,
-	/\b(tag|打标签|加标签)\b/i,
-	/\b(merge|合并)\b/i,
-	/\b(split|拆分)\b/i,
-	/\b(template|模板|批量)\b/i,
+	/\bcreate\b/i,
+	/\bdelete\b/i,
+	/\bremove\b/i,
+	/\brename\b/i,
+	/\bmove\b/i,
+	/\bwrite\b/i,
+	/\boverwrite\b/i,
+	/\borganize\b/i,
+	/\barchive\b/i,
+	/\bmodify\b/i,
+	/\bedit\b/i,
+	/\bupdate\b/i,
+	/\btag\b/i,
+	/\bmerge\b/i,
+	/\bsplit\b/i,
+	/\btemplate\b/i,
+	/创建|新建|删除|移除|重命名|改名|移动|迁移|写入|覆盖|整理|归档|修改|编辑|更新|打标签|加标签|合并|拆分|模板|批量/,
 ];
 
 /** Keywords that indicate plugin generation intent */
 const CREATOR_INTENT_PATTERNS = [
-	/\b(plugin|插件|生成插件|create.*plugin)\b/i,
-	/\b(generate|生成).*\b(code|代码|typescript)\b/i,
-	/\b(build|构建).*\b(extension|扩展)\b/i,
+	/\bplugin\b/i,
+	/插件|生成插件/,
+	/\bgenerate\b.*\b(code|typescript)\b/i,
+	/生成.*代码/,
+	/\bbuild\b.*\bextension\b/i,
+	/构建.*扩展/,
+	/create.*plugin/i,
 ];
 
 /**
