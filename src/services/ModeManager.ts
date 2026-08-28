@@ -62,6 +62,13 @@ const MODE_CONFIGS: Record<Mode, ModeConfig> = {
 	},
 };
 
+/** DSH session.create params per mode */
+const MODE_DSH_PARAMS: Record<Mode, { agentPreset: string; permission: string }> = {
+	[Mode.Chat]: { agentPreset: "standard", permission: "read-only" },
+	[Mode.Butler]: { agentPreset: "standard", permission: "workspace-write" },
+	[Mode.Creator]: { agentPreset: "cordis", permission: "danger-full-access" },
+};
+
 /**
  * Manages mutually exclusive operating modes.
  * Switching ends the current session and starts a new one.
@@ -104,7 +111,8 @@ export class ModeManager extends Events {
 
 		// Start new session via DSH RPC (session.create)
 		try {
-			this.sessionId = await this.client.createSession(vaultPath);
+			const dshParams = MODE_DSH_PARAMS[mode];
+			this.sessionId = await this.client.createSession(vaultPath, dshParams.agentPreset, dshParams.permission);
 		} catch (e) {
 			// Session creation may fail if harness is down
 			console.warn("Dshdian: failed to create session", e);
