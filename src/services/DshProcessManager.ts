@@ -34,20 +34,36 @@ export class DshProcessManager extends Events {
 
 	/** Find the dsh binary */
 	private findDsh(): string | null {
+		const home = process.env.HOME || "";
+
 		// Check npx cache (most common install method)
 		try {
+			const npxDir = join(home, ".npm/_npx");
 			const result = execSync(
-				"find ~/.npm/_npx -name 'dsh' -path '*/node_modules/.bin/dsh' 2>/dev/null | head -1",
+				`find "${npxDir}" -name 'dsh' -path '*/node_modules/.bin/dsh' 2>/dev/null | head -1`,
 				{ encoding: "utf-8", timeout: 5000 }
 			).trim();
 			if (result && existsSync(result)) return result;
 		} catch { /* ignore */ }
 
-		// Check PATH
+		// Check common global install locations
+		const commonPaths = [
+			join(home, ".npm/_npx/1e7f6d9597241db0/node_modules/.bin/dsh"),
+			"/usr/local/bin/dsh",
+			"/opt/homebrew/bin/dsh",
+			join(home, ".local/bin/dsh"),
+			join(home, "node_modules/.bin/dsh"),
+		];
+		for (const p of commonPaths) {
+			if (existsSync(p)) return p;
+		}
+
+		// Check PATH (may not work in GUI apps)
 		try {
 			const result = execSync("which dsh 2>/dev/null", {
 				encoding: "utf-8",
 				timeout: 3000,
+				env: { ...process.env, PATH: `${process.env.PATH}:/usr/local/bin:/opt/homebrew/bin:${home}/.local/bin` },
 			}).trim();
 			if (result) return result;
 		} catch { /* ignore */ }

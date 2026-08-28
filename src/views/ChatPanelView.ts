@@ -41,9 +41,9 @@ export class ChatPanelView extends ItemView {
 	private currentModel = "deepseek-chat";
 
 	private static readonly MODE_DISPLAY_NAMES: Record<Mode, string> = {
-		[Mode.Chat]: "聊天",
-		[Mode.Butler]: "管家",
-		[Mode.Creator]: "创造",
+		[Mode.Chat]: "Chat",
+		[Mode.Butler]: "Standard",
+		[Mode.Creator]: "Create",
 	};
 
 	private onSendMessage: ((content: string, refs: string[]) => void) | null = null;
@@ -150,7 +150,7 @@ export class ChatPanelView extends ItemView {
 			},
 		});
 		this.inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
-			if (e.key === "Enter" && !e.shiftKey) {
+			if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
 				e.preventDefault();
 				this.handleSend();
 			}
@@ -186,9 +186,9 @@ export class ChatPanelView extends ItemView {
 		this.modeBtn.textContent = ChatPanelView.MODE_DISPLAY_NAMES[this.currentMode];
 		this.modeBtn.addEventListener("click", (e) => {
 			const menu = new Menu();
-			menu.addItem((item) => item.setTitle("聊天").onClick(() => this.onModeChange?.(Mode.Chat)));
-			menu.addItem((item) => item.setTitle("管家").onClick(() => this.onModeChange?.(Mode.Butler)));
-			menu.addItem((item) => item.setTitle("创造").onClick(() => this.onModeChange?.(Mode.Creator)));
+			menu.addItem((item) => item.setTitle("Chat").onClick(() => this.onModeChange?.(Mode.Chat)));
+			menu.addItem((item) => item.setTitle("Standard").onClick(() => this.onModeChange?.(Mode.Butler)));
+			menu.addItem((item) => item.setTitle("Create").onClick(() => this.onModeChange?.(Mode.Creator)));
 			menu.showAtMouseEvent(e as unknown as MouseEvent);
 		});
 
@@ -633,6 +633,20 @@ export class ChatPanelView extends ItemView {
 		}
 	}
 
+	/** Trigger file picker by inserting @ and showing suggestions */
+	triggerFilePicker(): void {
+		if (!this.inputEl) return;
+		this.inputEl.focus();
+		// Insert @ at cursor to trigger suggestion flow
+		const pos = this.inputEl.selectionStart;
+		const before = this.inputEl.value.slice(0, pos);
+		const after = this.inputEl.value.slice(pos);
+		this.inputEl.value = before + "@" + after;
+		this.inputEl.selectionStart = pos + 1;
+		this.inputEl.selectionEnd = pos + 1;
+		this.handleInputChange();
+	}
+
 	/** Update context meter display */
 	updateContextMeter(used: number, max: number): void {
 		if (!this.contextMeterEl) return;
@@ -640,15 +654,13 @@ export class ChatPanelView extends ItemView {
 		const maxK = max >= 1000 ? `${(max / 1000).toFixed(0)}k` : String(max);
 		this.contextMeterEl.title = `Tokens: ${usedK} / ${maxK}`;
 		// Show usage text next to icon
-		const textEl = this.contextMeterEl.querySelector(".dshdian-meter-text");
-		if (textEl) {
-			textEl.textContent = usedK;
-		} else if (used > 0) {
-			const span = document.createElement("span");
-			span.className = "dshdian-meter-text";
-			span.textContent = usedK;
-			this.contextMeterEl.appendChild(span);
+		let textEl = this.contextMeterEl.querySelector(".dshdian-meter-text") as HTMLElement | null;
+		if (!textEl) {
+			textEl = document.createElement("span");
+			textEl.className = "dshdian-meter-text";
+			this.contextMeterEl.appendChild(textEl);
 		}
+		textEl.textContent = usedK;
 		// Change color when near limit (>80%)
 		const ratio = used / max;
 		if (ratio > 0.8) {

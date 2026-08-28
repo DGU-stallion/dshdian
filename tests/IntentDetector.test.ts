@@ -53,13 +53,13 @@ describe("IntentDetector", () => {
 	describe("getSuggestionMessage()", () => {
 		it("returns Butler message", () => {
 			const msg = detector.getSuggestionMessage(Mode.Butler);
-			expect(msg).toContain("管家模式");
+			expect(msg).toContain("Standard");
 			expect(msg.length).toBeGreaterThan(0);
 		});
 
 		it("returns Creator message", () => {
 			const msg = detector.getSuggestionMessage(Mode.Creator);
-			expect(msg).toContain("创造模式");
+			expect(msg).toContain("Create");
 			expect(msg.length).toBeGreaterThan(0);
 		});
 

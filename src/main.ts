@@ -760,11 +760,9 @@ export default class DshdianPlugin extends Plugin {
 
 	private handleAddContext(): void {
 		const view = this.getChatView();
-		if (view) {
-			view.addMessage(
-				HarnessClient.buildMessage("system", "Use @ in the text field to add file context.")
-			);
-		}
+		if (!view) return;
+		// Trigger the @ suggestion flow by inserting @ into the input
+		view.triggerFilePicker();
 	}
 
 	private async handleSlashCommand(content: string, view: ChatPanelView): Promise<boolean> {

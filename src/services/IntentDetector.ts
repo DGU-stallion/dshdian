@@ -59,9 +59,9 @@ export class IntentDetector {
 	getSuggestionMessage(suggestedMode: Mode): string {
 		switch (suggestedMode) {
 			case Mode.Butler:
-				return "检测到写操作意图。切换到管家模式？管家模式可以创建、修改和删除文件。";
+				return "检测到写操作意图。切换到 Standard 模式？Standard 模式可以创建、修改和删除文件。";
 			case Mode.Creator:
-				return "检测到插件生成意图。切换到创造模式？创造模式可以生成 Obsidian 原生插件。";
+				return "检测到插件生成意图。切换到 Create 模式？Create 模式可以生成 Obsidian 原生插件。";
 			default:
 				return "";
 		}
