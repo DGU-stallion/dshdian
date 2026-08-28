@@ -4,7 +4,6 @@ import { DshProcessManager } from "./services/DshProcessManager";
 import { HarnessClient } from "./services/HarnessClient";
 import { ModeManager } from "./services/ModeManager";
 import { ReferenceResolver } from "./services/ReferenceResolver";
-import { ApprovalStrategy } from "./services/ApprovalStrategy";
 import { PluginGenerator } from "./services/PluginGenerator";
 import { IntentDetector } from "./services/IntentDetector";
 import { VaultIndexer } from "./services/VaultIndexer";
@@ -25,7 +24,6 @@ export default class DshdianPlugin extends Plugin {
 	client!: HarnessClient;
 	modeManager!: ModeManager;
 	referenceResolver!: ReferenceResolver;
-	approvalStrategy!: ApprovalStrategy;
 	pluginGenerator!: PluginGenerator;
 	intentDetector!: IntentDetector;
 	vaultIndexer!: VaultIndexer;
@@ -33,7 +31,7 @@ export default class DshdianPlugin extends Plugin {
 	/** Track whether a streaming assistant response is in progress */
 	private isStreaming = false;
 
-	/** Track whether the current session has already received system instructions */
+	/** Track whether first message has been sent (for vault context injection) */
 	private sessionHasSentMessage = false;
 
 	async onload(): Promise<void> {
@@ -47,7 +45,6 @@ export default class DshdianPlugin extends Plugin {
 		this.processManager = new DshProcessManager(this.settings.harnessPort);
 		this.modeManager = new ModeManager(this.client);
 		this.referenceResolver = new ReferenceResolver(this.app);
-		this.approvalStrategy = new ApprovalStrategy(this.app, this.settings);
 		this.pluginGenerator = new PluginGenerator(this.app);
 		this.intentDetector = new IntentDetector();
 		this.vaultIndexer = new VaultIndexer(this.app);
@@ -162,7 +159,6 @@ export default class DshdianPlugin extends Plugin {
 		await this.saveData(this.settings);
 		this.client.setPort(this.settings.harnessPort);
 		this.processManager.setPort(this.settings.harnessPort);
-		this.approvalStrategy.updateSettings(this.settings);
 	}
 
 	// ─── Connection management ─────────────────────────────────────────
@@ -441,31 +437,26 @@ export default class DshdianPlugin extends Plugin {
 		frame: ApprovalRequestedFrame,
 		view: ChatPanelView
 	): Promise<void> {
-		const toolName = frame.toolName;
-		const currentMode = this.modeManager.getCurrentMode();
-
-		// In Chat mode, always reject write tools (shouldn't happen with read-only permission)
-		if (currentMode === Mode.Chat) {
-			await this.client.respond(frame.approvalId, {
-				type: "approval",
-				sessionId: frame.sessionId,
-				approvalId: frame.approvalId,
-				outcome: "rejected",
-			});
-			view.addMessage(
-				HarnessClient.buildMessage("system", `Chat mode is read-only. Rejected: ${toolName}`)
-			);
+		const rpcId = (frame as any).__rpcId as string;
+		if (!rpcId) {
+			// Cannot respond without rpcId — auto-reject
+			console.warn("Dshdian: approval/requested missing rpcId");
 			return;
 		}
 
-		// In Standard/Creator mode, always show approval dialog for tool calls
-		const approved = await view.showApprovalRequest(toolName, `Tool: ${toolName}`);
-		await this.client.respond(frame.approvalId, {
-			type: "approval",
+		const toolName = frame.toolName;
+		const description = frame.reason ?? `Tool: ${toolName}`;
+
+		// Show approval UI and wait for user decision
+		const approved = await view.showApprovalRequest(toolName, description);
+
+		// Respond using the envelope's rpcId
+		await this.client.respond(rpcId, {
 			sessionId: frame.sessionId,
 			approvalId: frame.approvalId,
 			outcome: approved ? "allowed-once" : "rejected",
 		});
+
 		if (!approved) {
 			view.addMessage(
 				HarnessClient.buildMessage("system", `Rejected: ${toolName}`)
@@ -574,8 +565,7 @@ export default class DshdianPlugin extends Plugin {
 		// Ensure session exists
 		let sid = this.modeManager.getSessionId();
 		if (!sid) {
-			await this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
-			sid = this.modeManager.getSessionId();
+			sid = await this.modeManager.ensureSession(this.getVaultPath());
 			if (!sid) {
 				view.addMessage(
 					HarnessClient.buildMessage("system", "Failed to create session. Is the DSH Harness running?")
@@ -584,26 +574,28 @@ export default class DshdianPlugin extends Plugin {
 			}
 		}
 
-		// Build system instructions (only sent on first message of session)
-		const isFirstMessage = !this.sessionHasSentMessage;
-		let instructions: string | undefined;
-		if (isFirstMessage) {
-			const modeConfig = this.modeManager.getConfig();
-			const settingsPrompt = this.getSettingsSystemPrompt();
+		// Build message content
+		// First message of session: include vault context as preamble
+		let fullContent: string;
+		if (!this.sessionHasSentMessage) {
 			const vaultIndex = this.vaultIndexer.getIndex();
-			instructions = [
-				settingsPrompt || modeConfig.systemPrompt,
-				`\n\n[Vault Structure]\n${vaultIndex}`,
-			].join("");
+			const parts: string[] = [];
+			parts.push(`[Vault Context]\n${vaultIndex}`);
+			if (context) {
+				parts.push(`[Referenced Files]\n${context}`);
+			}
+			parts.push(content);
+			fullContent = parts.join("\n\n");
 			this.sessionHasSentMessage = true;
+		} else {
+			// Subsequent messages: clean content + refs only
+			fullContent = context
+				? `${content}\n\n[Referenced Files]\n${context}`
+				: content;
 		}
 
-		// Build user message content (with @ref context if any)
-		const fullContent = context
-			? `${content}\n\n[Referenced Files]\n${context}`
-			: content;
 		try {
-			await this.client.sendMessage(sid, fullContent, instructions);
+			await this.client.sendMessage(sid, fullContent);
 		} catch (e) {
 			console.warn("Dshdian: failed to send message", e);
 			view.addMessage(
@@ -625,18 +617,23 @@ export default class DshdianPlugin extends Plugin {
 		if (leaf) {
 			await leaf.setViewState({ type: VIEW_TYPE_CHAT, active: true });
 			this.app.workspace.revealLeaf(leaf);
-			this.checkNoGitWarning();
 		}
 	}
 
 	private async handleModeChange(mode: Mode): Promise<void> {
 		const view = this.getChatView();
+		const needsClear = await this.modeManager.switchMode(mode, this.getVaultPath());
 		if (view) {
-			view.clearMessages();
 			view.setMode(mode);
+			if (needsClear) {
+				// Only clear on Create mode transitions (new session)
+				view.clearMessages();
+				view.setSessionTitle("");
+			}
 		}
-		this.sessionHasSentMessage = false;
-		await this.modeManager.switchMode(mode, this.getVaultPath());
+		if (needsClear) {
+			this.sessionHasSentMessage = false;
+		}
 
 		if (mode === Mode.Creator) {
 			this.pluginGenerator.watchGeneratedDir((pluginName) => {
@@ -651,15 +648,6 @@ export default class DshdianPlugin extends Plugin {
 		this.settings.defaultModel = model;
 	}
 
-	private getSettingsSystemPrompt(): string {
-		const mode = this.modeManager.getCurrentMode();
-		switch (mode) {
-			case Mode.Chat: return this.settings.chatSystemPrompt;
-			case Mode.Butler: return this.settings.butlerSystemPrompt;
-			case Mode.Creator: return this.settings.creatorSystemPrompt;
-		}
-	}
-
 	private handleNewChat(): void {
 		const view = this.getChatView();
 		if (view) {
@@ -668,8 +656,8 @@ export default class DshdianPlugin extends Plugin {
 			view.updateContextMeter(0, this.settings.maxContextLength);
 		}
 		this.isStreaming = false;
+		this.modeManager.clearSession();
 		this.sessionHasSentMessage = false;
-		this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
 	}
 
 	private async handleShowHistory(): Promise<void> {
@@ -772,7 +760,7 @@ export default class DshdianPlugin extends Plugin {
 				}
 			}
 
-			this.sessionHasSentMessage = true; // Existing session already has instructions
+			this.sessionHasSentMessage = true; // existing session already has context
 		} catch (e) {
 			view.addMessage(
 				HarnessClient.buildMessage("system", "加载历史记录失败")
@@ -816,11 +804,7 @@ export default class DshdianPlugin extends Plugin {
 				const noteContent = await this.app.vault.cachedRead(activeFile);
 				const prompt = `Analyze this note and suggest improvements (better tags, internal links to create, formatting improvements, missing metadata):\n\nFile: ${activeFile.path}\n\n${noteContent}`;
 				view.addMessage(HarnessClient.buildMessage("user", `/suggest ${activeFile.path}`));
-				let sid = this.modeManager.getSessionId();
-				if (!sid) {
-					await this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
-					sid = this.modeManager.getSessionId();
-				}
+				const sid = await this.modeManager.ensureSession(this.getVaultPath());
 				if (sid) {
 					await this.client.sendMessage(sid, prompt);
 				}
@@ -831,11 +815,7 @@ export default class DshdianPlugin extends Plugin {
 				const vaultIndex = this.vaultIndexer.getIndex();
 				const prompt = `Generate a Mermaid concept map diagram showing relationships between the main concepts in: ${topic}\n\nVault context:\n${vaultIndex}\n\nOutput a valid Mermaid flowchart diagram wrapped in a \`\`\`mermaid code block.`;
 				view.addMessage(HarnessClient.buildMessage("user", `/concept ${topic}`));
-				let sid = this.modeManager.getSessionId();
-				if (!sid) {
-					await this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
-					sid = this.modeManager.getSessionId();
-				}
+				const sid = await this.modeManager.ensureSession(this.getVaultPath());
 				if (sid) {
 					await this.client.sendMessage(sid, prompt);
 				}
@@ -855,11 +835,7 @@ export default class DshdianPlugin extends Plugin {
 				const fileList = files.map(f => f.path).join("\n");
 				const prompt = `Batch operation on ${files.length} notes in folder "${folder || "/"}":\n\nInstruction: ${instruction}\n\nFiles:\n${fileList}\n\nProcess each file according to the instruction. Show what changes you'll make before executing.`;
 				view.addMessage(HarnessClient.buildMessage("user", `/batch ${instruction}`));
-				let sid = this.modeManager.getSessionId();
-				if (!sid) {
-					await this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
-					sid = this.modeManager.getSessionId();
-				}
+				const sid = await this.modeManager.ensureSession(this.getVaultPath());
 				if (sid) {
 					await this.client.sendMessage(sid, prompt);
 				}
@@ -913,14 +889,6 @@ export default class DshdianPlugin extends Plugin {
 
 	private getAvailableCommands(): string[] {
 		return ["clear", "mode", "model", "suggest", "concept", "batch", "help"];
-	}
-
-	private async checkNoGitWarning(): Promise<void> {
-		const hasGit = await this.approvalStrategy.isGitRepo();
-		if (!hasGit) {
-			const view = this.getChatView();
-			if (view) view.showNoGitWarning();
-		}
 	}
 
 	// ─── Creator mode helpers ──────────────────────────────────────────

@@ -293,16 +293,12 @@ export class HarnessClient {
 		return result.sessionId;
 	}
 
-	async sendMessage(sessionId: string, content: string, instructions?: string): Promise<void> {
-		const payload: Record<string, unknown> = {
+	async sendMessage(sessionId: string, content: string): Promise<void> {
+		await this.rpc<{ accepted: true }>("session.prompt", {
 			sessionId,
 			mode: "queue",
 			content: [{ type: "text", text: content }],
-		};
-		if (instructions) {
-			payload.instructions = instructions;
-		}
-		await this.rpc<{ accepted: true }>("session.prompt", payload);
+		});
 	}
 
 	async getHistory(sessionId: string): Promise<unknown[]> {

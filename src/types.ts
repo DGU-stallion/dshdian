@@ -44,30 +44,6 @@ export interface ToolCallInfo {
 	result?: string;
 }
 
-/** Approval levels based on git state */
-export enum ApprovalLevel {
-	/** Read operations — pass through silently */
-	Silent = "silent",
-	/** Write ops with git — show notification */
-	Notify = "notify",
-	/** Requires inline approve/reject buttons */
-	Confirm = "confirm",
-}
-
-/** Decision returned by the approval strategy */
-export interface ApprovalDecision {
-	level: ApprovalLevel;
-	action: string;
-	description: string;
-}
-
-/** Action risk classification */
-export enum ActionRisk {
-	Low = "low",
-	Medium = "medium",
-	High = "high",
-}
-
 /** Reference types for @mentions */
 export interface Reference {
 	raw: string;

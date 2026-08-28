@@ -16,62 +16,44 @@ const MODE_CONFIGS: Record<Mode, ModeConfig> = {
 	[Mode.Chat]: {
 		name: "Chat",
 		mode: Mode.Chat,
-		systemPrompt:
-			"You are a read-only assistant. Answer questions based on the vault content provided. " +
-			"Do not modify any files. You have access only to read and search operations.\n\n" +
-			"Available tools: obsidian_read, obsidian_search, obsidian_tags, obsidian_backlinks.",
+		systemPrompt: "",
 		permission: Permission.Readonly,
 		toolWhitelist: CHAT_TOOLS,
 	},
 	[Mode.Butler]: {
-		name: "Butler",
+		name: "Standard",
 		mode: Mode.Butler,
-		systemPrompt:
-			"You are a vault butler. You can create, move, modify, and delete notes and files.\n\n" +
-			"Obsidian CLI quick-reference:\n" +
-			"- obsidian_read(path): Read file content\n" +
-			"- obsidian_search(query): Full-text search\n" +
-			"- obsidian_tags(): List all tags\n" +
-			"- obsidian_backlinks(path): Get backlinks for a note\n" +
-			"- obsidian_write(path, content): Write/overwrite file\n" +
-			"- obsidian_create(path, content?): Create new file\n" +
-			"- obsidian_delete(path): Delete file\n" +
-			"- obsidian_move(from, to): Move/rename file\n" +
-			"- obsidian_rename(path, newName): Rename file\n" +
-			"- obsidian_list(path?): List directory contents\n" +
-			"- obsidian_mkdir(path): Create directory",
+		systemPrompt: "",
 		permission: Permission.ReadWrite,
 		toolWhitelist: CLI_TOOLS,
 	},
 	[Mode.Creator]: {
-		name: "Creator",
+		name: "Create",
 		mode: Mode.Creator,
-		systemPrompt:
-			"You are a plugin creator. Generate complete, standalone Obsidian plugins.\n\n" +
-			"Plugin API summary:\n" +
-			"- Extend Plugin class with onload()/onunload()\n" +
-			"- Register views, commands, settings via this.registerView/addCommand/addSettingTab\n" +
-			"- Use app.vault for file ops, app.workspace for UI, app.metadataCache for metadata\n\n" +
-			"Obsidian CLI quick-reference:\n" +
-			"- obsidian_read, obsidian_search, obsidian_tags, obsidian_backlinks\n" +
-			"- obsidian_write, obsidian_create, obsidian_delete, obsidian_move\n" +
-			"- obsidian_rename, obsidian_list, obsidian_mkdir\n" +
-			"- esbuild: Compile TypeScript plugin source to bundled main.js",
+		systemPrompt: "",
 		permission: Permission.ReadWritePlugins,
 		toolWhitelist: CREATOR_TOOLS,
 	},
 };
 
-/** DSH session.create params per mode */
+/** Maps Mode to DSH session.create params */
 const MODE_DSH_PARAMS: Record<Mode, { agentPreset: string; permission: string }> = {
 	[Mode.Chat]: { agentPreset: "standard", permission: "read-only" },
 	[Mode.Butler]: { agentPreset: "standard", permission: "workspace-write" },
 	[Mode.Creator]: { agentPreset: "cordis", permission: "danger-full-access" },
 };
 
+/** Maps Mode to DSH /permission command value */
+const MODE_PERMISSION_CMD: Record<Mode, string> = {
+	[Mode.Chat]: "read-only",
+	[Mode.Butler]: "workspace-write",
+	[Mode.Creator]: "danger-full-access",
+};
+
 /**
  * Manages mutually exclusive operating modes.
- * Switching ends the current session and starts a new one.
+ * Chat ↔ Standard switches permission within same session.
+ * Create requires a new session (different agentPreset).
  */
 export class ModeManager extends Events {
 	private currentMode: Mode = Mode.Chat;
@@ -95,31 +77,60 @@ export class ModeManager extends Events {
 		return this.sessionId;
 	}
 
-	/** Get tool whitelist for current mode */
 	getToolWhitelist(): string[] {
 		return MODE_CONFIGS[this.currentMode].toolWhitelist;
 	}
 
-	/** Switch to a new mode — ends current session, creates new one */
-	async switchMode(mode: Mode, vaultPath?: string): Promise<void> {
-		if (mode === this.currentMode && this.sessionId !== null) {
-			return;
-		}
-		// End current session by discarding reference
-		this.sessionId = null;
+	/**
+	 * Switch mode. Chat ↔ Standard = permission change (same session).
+	 * Anything involving Create = new session.
+	 */
+	async switchMode(mode: Mode, vaultPath?: string): Promise<boolean> {
+		if (mode === this.currentMode) return false;
+
+		const oldMode = this.currentMode;
+		const needsNewSession = oldMode === Mode.Creator || mode === Mode.Creator;
+
 		this.currentMode = mode;
 
-		// Start new session via DSH RPC (session.create)
+		if (needsNewSession) {
+			// Create requires different agentPreset — must create new session
+			this.sessionId = null;
+			try {
+				const params = MODE_DSH_PARAMS[mode];
+				this.sessionId = await this.client.createSession(vaultPath, params.agentPreset, params.permission);
+			} catch (e) {
+				console.warn("Dshdian: failed to create session", e);
+				this.sessionId = null;
+			}
+			this.trigger("mode-changed", mode);
+			return true; // signals: new session created, UI should clear
+		} else {
+			// Chat ↔ Standard: same session, switch permission
+			if (this.sessionId) {
+				const permCmd = MODE_PERMISSION_CMD[mode];
+				try {
+					await this.client.sendMessage(this.sessionId, `/permission ${permCmd}`);
+				} catch (e) {
+					console.warn("Dshdian: failed to switch permission", e);
+				}
+			}
+			this.trigger("mode-changed", mode);
+			return false; // signals: same session, don't clear UI
+		}
+	}
+
+	/** Create initial session (call on first message if no session exists) */
+	async ensureSession(vaultPath?: string): Promise<string | null> {
+		if (this.sessionId) return this.sessionId;
 		try {
-			const dshParams = MODE_DSH_PARAMS[mode];
-			this.sessionId = await this.client.createSession(vaultPath, dshParams.agentPreset, dshParams.permission);
+			const params = MODE_DSH_PARAMS[this.currentMode];
+			this.sessionId = await this.client.createSession(vaultPath, params.agentPreset, params.permission);
 		} catch (e) {
-			// Session creation may fail if harness is down
 			console.warn("Dshdian: failed to create session", e);
 			this.sessionId = null;
 		}
-
-		this.trigger("mode-changed", mode);
+		return this.sessionId;
 	}
 
 	/** Reset session without switching mode */

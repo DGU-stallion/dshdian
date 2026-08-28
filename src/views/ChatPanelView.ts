@@ -505,16 +505,6 @@ export class ChatPanelView extends ItemView {
 		this.streamingText = "";
 	}
 
-	/** Show persistent no-git warning banner */
-	showNoGitWarning(): void {
-		if (!this.messageListEl) return;
-		if (this.messageListEl.querySelector(".dshdian-no-git-warning")) return;
-		const banner = document.createElement("div");
-		banner.className = "dshdian-no-git-warning";
-		banner.textContent = "⚠️ No git repository detected — all write operations will require confirmation.";
-		this.messageListEl.insertBefore(banner, this.messageListEl.firstChild);
-	}
-
 	/** Show inline approval request with Approve/Reject buttons */
 	showApprovalRequest(action: string, description: string): Promise<boolean> {
 		return new Promise((resolve) => {
