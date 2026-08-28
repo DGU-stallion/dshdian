@@ -28,6 +28,11 @@ export class ChatPanelView extends ItemView {
 	private streamingText = "";
 	private streamRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
+	/** The currently streaming reasoning block element */
+	private streamingReasoningEl: HTMLElement | null = null;
+	private streamingReasoningText = "";
+	private reasoningRenderTimer: ReturnType<typeof setTimeout> | null = null;
+
 	/** Selected file references shown as pills */
 	private selectedRefs: string[] = [];
 
@@ -49,6 +54,8 @@ export class ChatPanelView extends ItemView {
 	private onNewChat: (() => void) | null = null;
 	private onShowHistory: (() => void) | null = null;
 	private onAddContext: (() => void) | null = null;
+	private onSaveAsNote: ((content: string) => void) | null = null;
+	private onRetryMessage: (() => void) | null = null;
 
 	getViewType(): string {
 		return VIEW_TYPE_CHAT;
@@ -72,6 +79,8 @@ export class ChatPanelView extends ItemView {
 		onNewChat: () => void;
 		onShowHistory: () => void;
 		onAddContext: () => void;
+		onSaveAsNote: (content: string) => void;
+		onRetryMessage: () => void;
 	}): void {
 		this.onSendMessage = handlers.onSendMessage;
 		this.onModeChange = handlers.onModeChange;
@@ -81,6 +90,8 @@ export class ChatPanelView extends ItemView {
 		this.onNewChat = handlers.onNewChat;
 		this.onShowHistory = handlers.onShowHistory;
 		this.onAddContext = handlers.onAddContext;
+		this.onSaveAsNote = handlers.onSaveAsNote;
+		this.onRetryMessage = handlers.onRetryMessage;
 	}
 
 	async onOpen(): Promise<void> {
@@ -205,6 +216,10 @@ export class ChatPanelView extends ItemView {
 			clearTimeout(this.streamRenderTimer);
 			this.streamRenderTimer = null;
 		}
+		if (this.reasoningRenderTimer !== null) {
+			clearTimeout(this.reasoningRenderTimer);
+			this.reasoningRenderTimer = null;
+		}
 		this.messageListEl = null;
 		this.inputEl = null;
 		this.suggestionsEl = null;
@@ -218,6 +233,8 @@ export class ChatPanelView extends ItemView {
 		this.streamingMsgEl = null;
 		this.streamingContentEl = null;
 		this.streamingText = "";
+		this.streamingReasoningEl = null;
+		this.streamingReasoningText = "";
 		this.selectedRefs = [];
 	}
 
@@ -263,6 +280,8 @@ export class ChatPanelView extends ItemView {
 		if (msg.role === "assistant") {
 			const contentEl = msgEl.createDiv({ cls: "dshdian-message-content" });
 			renderMarkdown(contentEl, msg.content, "", this);
+			// Action buttons
+			this.addMessageActions(msgEl, msg.content);
 		} else {
 			msgEl.createEl("div", { cls: "dshdian-message-content", text: msg.content });
 		}
@@ -299,17 +318,121 @@ export class ChatPanelView extends ItemView {
 		this.scrollToBottom();
 	}
 
+	/** Start or get the collapsible reasoning block within the current streaming message */
+	private ensureReasoningBlock(): HTMLElement | null {
+		if (this.streamingReasoningEl) return this.streamingReasoningEl;
+		if (!this.streamingMsgEl) return null;
+
+		// Insert reasoning block before the content element
+		const details = this.streamingMsgEl.createEl("details", { cls: "dshdian-reasoning" });
+		details.setAttribute("open", "");
+		details.createEl("summary", { cls: "dshdian-reasoning-summary", text: "Thinking..." });
+		const content = details.createDiv({ cls: "dshdian-reasoning-content" });
+		this.streamingReasoningEl = content;
+
+		// Move it before the message content
+		if (this.streamingContentEl) {
+			this.streamingMsgEl.insertBefore(details, this.streamingContentEl);
+		}
+		return content;
+	}
+
+	/** Append reasoning token to the collapsible thinking block */
+	appendReasoningToken(token: string): void {
+		const el = this.ensureReasoningBlock();
+		if (!el) return;
+		this.streamingReasoningText += token;
+		el.textContent = this.streamingReasoningText;
+		// Debounced render for reasoning
+		if (this.reasoningRenderTimer === null) {
+			this.reasoningRenderTimer = setTimeout(() => {
+				this.reasoningRenderTimer = null;
+				if (this.streamingReasoningEl && this.streamingReasoningText) {
+					renderMarkdown(this.streamingReasoningEl, this.streamingReasoningText, "", this);
+				}
+			}, 150);
+		}
+		this.scrollToBottom();
+	}
+
+	/** Show a tool call card with arguments */
+	addToolCallCard(name: string, args?: string): void {
+		if (!this.messageListEl) return;
+		const el = this.messageListEl.createDiv({ cls: "dshdian-tool-card dshdian-tool-card-running" });
+		el.dataset.toolName = name;
+
+		const headerEl = el.createDiv({ cls: "dshdian-tool-card-header" });
+		headerEl.createEl("span", { cls: "dshdian-tool-card-icon", text: "⚙️" });
+		headerEl.createEl("span", { cls: "dshdian-tool-card-name", text: name });
+		headerEl.createEl("span", { cls: "dshdian-tool-card-status", text: "running" });
+
+		if (args) {
+			const argsEl = el.createDiv({ cls: "dshdian-tool-card-args" });
+			argsEl.textContent = args.length > 200 ? args.slice(0, 200) + "..." : args;
+		}
+
+		// Click to toggle expand
+		headerEl.addEventListener("click", () => {
+			el.toggleClass("dshdian-tool-card-expanded", !el.hasClass("dshdian-tool-card-expanded"));
+		});
+
+		this.scrollToBottom();
+	}
+
+	/** Update a tool call card with result */
+	updateToolCallCard(name: string, status: "completed" | "failed", result?: string): void {
+		if (!this.messageListEl) return;
+		const cards = this.messageListEl.querySelectorAll(".dshdian-tool-card");
+		for (let i = cards.length - 1; i >= 0; i--) {
+			const card = cards[i] as HTMLElement;
+			if (card.dataset.toolName === name) {
+				card.className = `dshdian-tool-card dshdian-tool-card-${status}`;
+				const statusEl = card.querySelector(".dshdian-tool-card-status");
+				if (statusEl) statusEl.textContent = status;
+				const iconEl = card.querySelector(".dshdian-tool-card-icon");
+				if (iconEl) iconEl.textContent = status === "completed" ? "✅" : "❌";
+				if (result) {
+					let resultEl = card.querySelector(".dshdian-tool-card-result") as HTMLElement | null;
+					if (!resultEl) {
+						resultEl = card.createDiv({ cls: "dshdian-tool-card-result" });
+					}
+					resultEl.textContent = result;
+				}
+				break;
+			}
+		}
+	}
+
 	/** Finalize the streaming message — render as markdown */
 	finalizeStreamingMessage(): void {
 		if (this.streamRenderTimer !== null) {
 			clearTimeout(this.streamRenderTimer);
 			this.streamRenderTimer = null;
 		}
+		if (this.reasoningRenderTimer !== null) {
+			clearTimeout(this.reasoningRenderTimer);
+			this.reasoningRenderTimer = null;
+		}
+		// Finalize reasoning block
+		if (this.streamingReasoningEl && this.streamingReasoningText) {
+			renderMarkdown(this.streamingReasoningEl, this.streamingReasoningText, "", this);
+			// Collapse reasoning after completion
+			const details = this.streamingReasoningEl.parentElement;
+			if (details && details.tagName === "DETAILS") {
+				details.removeAttribute("open");
+				const summary = details.querySelector("summary");
+				if (summary) summary.textContent = "Thinking (click to expand)";
+			}
+		}
+		this.streamingReasoningEl = null;
+		this.streamingReasoningText = "";
 		if (this.streamingMsgEl && this.streamingContentEl) {
 			this.streamingMsgEl.removeClass("dshdian-message-streaming");
 			const text = this.streamingText;
 			const contentEl = this.streamingContentEl;
 			renderMarkdown(contentEl, text, "", this);
+			// Action buttons
+			this.addMessageActions(this.streamingMsgEl, text);
 		}
 		this.streamingMsgEl = null;
 		this.streamingContentEl = null;
@@ -465,6 +588,44 @@ export class ChatPanelView extends ItemView {
 		}
 	}
 
+	/** Add action buttons (Copy / Save as Note / Retry) to an assistant message */
+	private addMessageActions(msgEl: HTMLElement, content: string): void {
+		const actions = msgEl.createDiv({ cls: "dshdian-message-actions" });
+
+		// Copy button
+		const copyBtn = actions.createEl("button", {
+			cls: "dshdian-action-btn",
+			attr: { "aria-label": "Copy" },
+		});
+		setIcon(copyBtn, "copy");
+		copyBtn.addEventListener("click", () => {
+			navigator.clipboard.writeText(content).then(() => {
+				setIcon(copyBtn, "check");
+				setTimeout(() => setIcon(copyBtn, "copy"), 1500);
+			});
+		});
+
+		// Save as Note button
+		const saveBtn = actions.createEl("button", {
+			cls: "dshdian-action-btn",
+			attr: { "aria-label": "Save as Note" },
+		});
+		setIcon(saveBtn, "file-plus");
+		saveBtn.addEventListener("click", () => {
+			if (this.onSaveAsNote) this.onSaveAsNote(content);
+		});
+
+		// Retry button
+		const retryBtn = actions.createEl("button", {
+			cls: "dshdian-action-btn",
+			attr: { "aria-label": "Retry" },
+		});
+		setIcon(retryBtn, "refresh-cw");
+		retryBtn.addEventListener("click", () => {
+			if (this.onRetryMessage) this.onRetryMessage();
+		});
+	}
+
 	private scrollToBottom(): void {
 		if (this.messageListEl) {
 			this.messageListEl.scrollTop = this.messageListEl.scrollHeight;
@@ -582,6 +743,100 @@ export class ChatPanelView extends ItemView {
 		closeBtn.addEventListener("click", () => {
 			this.selectedRefs = this.selectedRefs.filter((r) => r !== ref);
 			pill.remove();
+		});
+	}
+
+	// ─── Question interaction ──────────────────────────────────────────
+
+	/** Show a question card with options for the user to answer */
+	showQuestionCard(
+		question: string,
+		header: string | undefined,
+		detail: string | undefined,
+		options: Array<{ label: string; description?: string }> | undefined,
+		multiSelect: boolean
+	): Promise<string[] | null> {
+		return new Promise((resolve) => {
+			if (!this.messageListEl) {
+				resolve(null);
+				return;
+			}
+			const el = this.messageListEl.createDiv({ cls: "dshdian-question-card" });
+
+			// Header
+			if (header) {
+				el.createEl("div", { cls: "dshdian-question-header", text: header });
+			}
+
+			// Question text
+			el.createEl("div", { cls: "dshdian-question-text", text: question });
+
+			// Detail
+			if (detail) {
+				el.createEl("div", { cls: "dshdian-question-detail", text: detail });
+			}
+
+			if (options && options.length > 0) {
+				// Render options as clickable items
+				const selected = new Set<string>();
+				const optionsEl = el.createDiv({ cls: "dshdian-question-options" });
+
+				for (const opt of options) {
+					const optEl = optionsEl.createDiv({ cls: "dshdian-question-option" });
+					optEl.createEl("span", { cls: "dshdian-question-option-label", text: opt.label });
+					if (opt.description) {
+						optEl.createEl("span", { cls: "dshdian-question-option-desc", text: opt.description });
+					}
+					optEl.addEventListener("click", () => {
+						if (multiSelect) {
+							if (selected.has(opt.label)) {
+								selected.delete(opt.label);
+								optEl.removeClass("dshdian-question-option-selected");
+							} else {
+								selected.add(opt.label);
+								optEl.addClass("dshdian-question-option-selected");
+							}
+						} else {
+							// Single select — resolve immediately
+							el.remove();
+							resolve([opt.label]);
+						}
+					});
+				}
+
+				if (multiSelect) {
+					// Add confirm button for multi-select
+					const btnRow = el.createDiv({ cls: "dshdian-question-buttons" });
+					const confirmBtn = btnRow.createEl("button", { cls: "dshdian-question-confirm-btn", text: "Confirm" });
+					const cancelBtn = btnRow.createEl("button", { cls: "dshdian-question-cancel-btn", text: "Cancel" });
+					confirmBtn.addEventListener("click", () => { el.remove(); resolve([...selected]); });
+					cancelBtn.addEventListener("click", () => { el.remove(); resolve(null); });
+				}
+			} else {
+				// Free-text input
+				const inputEl = el.createEl("input", {
+					cls: "dshdian-question-input",
+					attr: { type: "text", placeholder: "Type your answer..." },
+				});
+				const btnRow = el.createDiv({ cls: "dshdian-question-buttons" });
+				const submitBtn = btnRow.createEl("button", { cls: "dshdian-question-confirm-btn", text: "Submit" });
+				const cancelBtn = btnRow.createEl("button", { cls: "dshdian-question-cancel-btn", text: "Cancel" });
+				submitBtn.addEventListener("click", () => {
+					const val = inputEl.value.trim();
+					el.remove();
+					resolve(val ? [val] : null);
+				});
+				inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
+					if (e.key === "Enter") {
+						const val = inputEl.value.trim();
+						el.remove();
+						resolve(val ? [val] : null);
+					}
+				});
+				cancelBtn.addEventListener("click", () => { el.remove(); resolve(null); });
+			}
+
+			this.scrollToBottom();
 		});
 	}
 
