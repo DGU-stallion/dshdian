@@ -1,4 +1,4 @@
-/* Dshdian — Obsidian-native Chat Panel styles */
+/* Dshdian — DSH-aligned styles */
 
 /* ====== Container ====== */
 .dshdian-chat-container {
@@ -9,14 +9,24 @@
 	background: var(--background-primary);
 }
 
-/* ====== Header buttons (New / History) ====== */
+/* ====== Header ====== */
 .dshdian-header-actions {
 	display: flex;
 	align-items: center;
 	gap: 4px;
 	padding: 8px 12px 0;
-	justify-content: flex-end;
 	flex-shrink: 0;
+}
+
+.dshdian-session-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 200px;
+	margin-left: 8px;
 }
 
 .dshdian-icon-btn {
@@ -32,38 +42,13 @@
 	cursor: pointer;
 }
 
-.dshdian-icon-btn:hover {
-	background: var(--background-modifier-hover);
-	color: var(--text-normal);
-}
+.dshdian-icon-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 
-/* ====== Status indicator ====== */
-.dshdian-status {
-	font-size: 11px;
-	padding: 2px 6px;
-}
-
-.dshdian-status-connected {
-	color: var(--color-green);
-}
-
-.dshdian-status-streaming {
-	color: var(--color-blue);
-}
-
-.dshdian-status-disconnected {
-	color: var(--text-muted);
-}
-
-/* ====== No-git warning ====== */
-.dshdian-no-git-warning {
-	padding: 6px 12px;
-	background: var(--background-modifier-error);
-	color: var(--text-on-accent);
-	font-size: 12px;
-	text-align: center;
-	flex-shrink: 0;
-}
+/* ====== Status ====== */
+.dshdian-status { font-size: 11px; padding: 2px 6px; }
+.dshdian-status-connected { color: var(--color-green); }
+.dshdian-status-streaming { color: var(--color-blue); }
+.dshdian-status-disconnected { color: var(--text-muted); }
 
 /* ====== Message list ====== */
 .dshdian-message-list {
@@ -75,26 +60,35 @@
 	gap: 16px;
 }
 
-/* ====== Messages — shared ====== */
+.dshdian-message-list::-webkit-scrollbar { width: 6px; }
+.dshdian-message-list::-webkit-scrollbar-thumb { background: var(--background-modifier-border); border-radius: 3px; }
+
+/* ====== Messages ====== */
 .dshdian-message {
 	font-size: 16px;
-	line-height: 28px;
+	line-height: 24px;
 	word-wrap: break-word;
 	user-select: text;
 	-webkit-user-select: text;
+	animation: dshdian-msg-in 0.15s ease;
 }
 
-/* ====== User bubble ====== */
+@keyframes dshdian-msg-in {
+	from { opacity: 0; transform: translateY(6px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+/* User bubble (DSH style: 22px radius, 82% max-width, accent bg) */
 .dshdian-message-user {
 	align-self: flex-end;
-	max-width: 82%;
+	max-width: min(525px, 82%);
 	border-radius: 22px;
 	padding: 10px 16px;
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 }
 
-/* ====== Assistant — full width, markdown ====== */
+/* Assistant message: full width, no bg */
 .dshdian-message-assistant {
 	align-self: flex-start;
 	width: 100%;
@@ -104,14 +98,12 @@
 .dshdian-message-assistant .dshdian-message-content {
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	gap: 8px;
 }
 
-.dshdian-message-assistant .dshdian-message-content p {
-	margin: 0;
-}
+.dshdian-message-assistant .dshdian-message-content p { margin: 0; }
 
-/* ====== System message ====== */
+/* System message */
 .dshdian-message-system {
 	align-self: center;
 	background: var(--background-modifier-border);
@@ -122,102 +114,164 @@
 	border-radius: 12px;
 }
 
-/* Streaming indicator */
+/* Streaming cursor */
 .dshdian-message-streaming .dshdian-message-content::after {
 	content: "▍";
 	animation: dshdian-blink 1s step-end infinite;
 }
+@keyframes dshdian-blink { 50% { opacity: 0; } }
 
-@keyframes dshdian-blink {
-	50% { opacity: 0; }
+/* ====== Reasoning block (DSH Think fold) ====== */
+.dshdian-reasoning {
+	margin-bottom: 8px;
+	border-radius: 8px;
+	background: var(--background-secondary);
+	overflow: hidden;
 }
 
-/* ====== Tool calls ====== */
-.dshdian-tool-call {
-	display: flex;
-	align-items: center;
-	gap: 8px;
+.dshdian-reasoning[open] .dshdian-reasoning-summary { color: var(--text-muted); }
+
+.dshdian-reasoning-summary {
 	padding: 6px 12px;
-	border-radius: 6px;
 	font-size: 13px;
-	background: var(--background-secondary);
-	border-left: 3px solid var(--text-muted);
+	color: var(--text-muted);
 	cursor: pointer;
 	user-select: none;
+	list-style: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
 }
 
-.dshdian-tool-call:hover {
-	background: var(--background-modifier-hover);
+.dshdian-reasoning-summary::before {
+	content: "🧠";
+	font-size: 14px;
 }
 
-.dshdian-tool-running {
-	border-left-color: var(--color-blue);
-}
+.dshdian-reasoning-summary::-webkit-details-marker { display: none; }
 
-.dshdian-tool-completed {
-	border-left-color: var(--color-green);
-}
-
-.dshdian-tool-failed {
-	border-left-color: var(--color-red);
-}
-
-.dshdian-tool-icon {
-	flex-shrink: 0;
-}
-
-.dshdian-tool-name {
-	font-weight: 600;
-	font-family: var(--font-monospace);
-}
-
-.dshdian-tool-result {
+.dshdian-reasoning-content {
+	padding: 4px 12px 8px;
+	font-size: 14px;
+	line-height: 24px;
 	color: var(--text-muted);
-	font-size: 11px;
+	white-space: pre-wrap;
+}
+
+/* Sweep animation for running reasoning */
+.dshdian-reasoning[open] .dshdian-reasoning-summary::after {
+	content: "";
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--color-blue);
+	margin-left: auto;
+	animation: dshdian-pulse 1.5s ease-in-out infinite;
+}
+@keyframes dshdian-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+/* ====== Tool call card (DSH variant style) ====== */
+.dshdian-tool-card {
+	border-radius: 8px;
+	background: var(--background-secondary);
+	overflow: hidden;
+	margin: 4px 0;
+}
+
+.dshdian-tool-card-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 12px;
+	cursor: pointer;
+	user-select: none;
+	position: relative;
+	overflow: hidden;
+}
+
+.dshdian-tool-card-row:hover { background: var(--background-modifier-hover); }
+
+/* Running sweep animation */
+.dshdian-tool-card[data-state="running"] .dshdian-tool-card-row::after {
+	content: "";
+	position: absolute;
+	top: 0; bottom: 0;
+	width: 200px;
+	background: linear-gradient(90deg, transparent 0%, var(--background-modifier-hover) 50%, transparent 100%);
+	animation: dshdian-sweep 2.5s ease-out infinite;
+}
+@keyframes dshdian-sweep { from { left: -200px; } to { left: 100%; } }
+
+.dshdian-tool-card-icon { font-size: 14px; flex-shrink: 0; }
+.dshdian-tool-card-title { font-size: 13px; font-weight: 600; color: var(--text-normal); }
+.dshdian-tool-card-sep { color: var(--text-faint); font-size: 10px; }
+.dshdian-tool-card-summary {
+	font-size: 13px;
+	color: var(--text-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	max-width: 200px;
+	flex: 1;
+	min-width: 0;
 }
 
-.dshdian-tool-detail {
+.dshdian-tool-card-body {
 	display: none;
-	padding: 6px 12px 6px 24px;
+	padding: 0 12px 8px;
+}
+
+.dshdian-tool-card-expanded .dshdian-tool-card-body { display: block; }
+
+.dshdian-tool-card-section { margin-top: 8px; }
+.dshdian-tool-card-label {
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--text-faint);
+	text-transform: uppercase;
+	margin-bottom: 4px;
+}
+.dshdian-tool-card-content {
 	font-size: 12px;
+	font-family: var(--font-monospace);
 	color: var(--text-muted);
 	white-space: pre-wrap;
-	font-family: var(--font-monospace);
-	user-select: text;
-	-webkit-user-select: text;
+	word-break: break-all;
+	max-height: 200px;
+	overflow-y: auto;
 }
 
-.dshdian-tool-call.dshdian-tool-expanded + .dshdian-tool-detail {
-	display: block;
-}
+.dshdian-tool-card-completed { border-left: 3px solid var(--color-green); }
+.dshdian-tool-card-failed { border-left: 3px solid var(--color-red); }
+.dshdian-tool-card-running { border-left: 3px solid var(--color-blue); }
 
-/* ====== Composer Card ====== */
+/* ====== Composer (DSH-aligned: 22px radius card) ====== */
 .dshdian-composer {
 	flex-shrink: 0;
 	margin: 0 12px 12px;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 12px;
-	padding: 12px;
+	border-radius: 22px;
+	padding: 10px 0 0;
 	background: var(--background-primary);
+	box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	transition: border-color 0.15s;
 }
 
-/* Context pills row */
+.dshdian-composer:focus-within { border-color: var(--interactive-accent); }
+
+/* Context pills */
 .dshdian-pill-container {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-	margin-bottom: 8px;
+	padding: 0 16px;
 	min-height: 0;
 }
-
-.dshdian-pill-container:empty {
-	display: none;
-	margin-bottom: 0;
-}
+.dshdian-pill-container:empty { display: none; }
 
 .dshdian-ref-pill {
 	display: inline-flex;
@@ -229,23 +283,10 @@
 	color: var(--text-normal);
 	font-size: 12px;
 	font-weight: 500;
-	max-width: 180px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
-.dshdian-ref-pill-close {
-	cursor: pointer;
-	opacity: 0.6;
-	font-weight: bold;
-	font-size: 14px;
-	line-height: 1;
-}
-
-.dshdian-ref-pill-close:hover {
-	opacity: 1;
-}
+.dshdian-ref-pill-close { cursor: pointer; opacity: 0.6; font-weight: bold; font-size: 14px; }
+.dshdian-ref-pill-close:hover { opacity: 1; }
 
 /* Textarea */
 .dshdian-input {
@@ -253,118 +294,115 @@
 	resize: none;
 	min-height: 44px;
 	max-height: 200px;
-	padding: 8px 0;
+	padding: 4px 12px 0 16px;
 	border: none;
 	background: transparent;
 	color: var(--text-normal);
 	font-family: inherit;
-	font-size: 15px;
-	line-height: 1.5;
+	font-size: 16px;
+	line-height: 24px;
 	outline: none;
+	white-space: pre-wrap;
+	word-break: break-word;
+	overflow-wrap: anywhere;
 }
+.dshdian-input::placeholder { color: var(--text-faint); }
+.dshdian-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.dshdian-input::placeholder {
-	color: var(--text-faint);
-}
-
-.dshdian-input:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
-}
-
-/* ====== Toolbar row ====== */
+/* ====== Toolbar row (DSH: tools | modes | trailing) ====== */
 .dshdian-toolbar {
 	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
 	align-items: center;
-	gap: 6px;
-	margin-top: 4px;
+	gap: 12px;
+	min-width: 0;
+	padding: 2px 8px 6px;
 }
 
-.dshdian-toolbar-spacer {
-	flex: 1;
-}
+.dshdian-toolbar-spacer { flex: 1; }
 
-/* Pill-shaped toolbar buttons showing text */
-.dshdian-toolbar-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	padding: 4px 10px;
-	border-radius: 14px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
-	color: var(--text-muted);
-	font-size: 12px;
-	font-weight: 500;
+/* + Add button (DSH: 28px circle) */
+.dshdian-add-btn {
+	background: var(--background-secondary);
+	width: 28px;
+	height: 28px;
+	color: var(--text-normal);
 	cursor: pointer;
-	white-space: nowrap;
+	border: none;
+	border-radius: 999px;
+	display: grid;
+	place-items: center;
 }
+.dshdian-add-btn:hover { background: var(--background-modifier-hover); }
 
-.dshdian-toolbar-btn:hover {
-	background: var(--background-modifier-hover);
-	color: var(--text-normal);
-}
-
-/* Agent mode button */
-.dshdian-agent-btn {
-	color: var(--text-normal);
-	font-weight: 600;
-}
-
-/* Model name button */
-.dshdian-model-btn {
+/* Select buttons (permission, model) — DSH native select style */
+.dshdian-toolbar-select {
+	max-width: 180px;
+	height: 28px;
 	color: var(--text-muted);
+	white-space: nowrap;
+	cursor: pointer;
+	appearance: none;
+	background-color: transparent;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	background-position: right 4px center;
+	background-repeat: no-repeat;
+	background-size: 12px;
+	border: none;
+	border-radius: 8px;
+	outline: none;
+	padding: 0 20px 0 8px;
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 20px;
 }
+.dshdian-toolbar-select:hover { background-color: var(--background-modifier-hover); }
 
-/* Context meter */
+/* Context meter (SVG ring) */
 .dshdian-context-meter {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	padding: 2px 8px;
-	border-radius: 10px;
-	background: var(--background-secondary);
-	color: var(--text-muted);
-	font-size: 11px;
-	font-weight: 500;
+	width: 24px;
+	height: 24px;
 	cursor: default;
+	position: relative;
 }
 
-.dshdian-context-meter-warn {
-	color: var(--color-orange);
-	background: rgba(255, 165, 0, 0.1);
-}
+.dshdian-context-meter svg { width: 14px; height: 14px; }
+.dshdian-context-meter-track { fill: none; stroke: var(--background-modifier-border); stroke-width: 2; }
+.dshdian-context-meter-fill { fill: none; stroke: var(--interactive-accent); stroke-width: 2; stroke-linecap: round; transition: stroke-dashoffset 0.3s; }
+.dshdian-context-meter-warn .dshdian-context-meter-fill { stroke: var(--color-orange); }
 
-/* Send button */
+/* Send/Stop button (DSH: 34px circle, blue, white icon) */
 .dshdian-send-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 30px;
-	height: 30px;
-	border-radius: 50%;
+	width: 34px;
+	height: 34px;
+	border-radius: 999px;
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	cursor: pointer;
 	border: none;
-	transition: opacity 0.15s;
+	display: grid;
+	place-items: center;
+	transition: background-color 0.1s, opacity 0.1s;
+	transform: translateY(-2px);
 }
-
-.dshdian-send-btn:hover {
-	opacity: 0.85;
-}
+.dshdian-send-btn:hover { opacity: 0.85; }
+.dshdian-send-btn:disabled { opacity: 0.4; cursor: default; }
+.dshdian-send-btn svg { width: 16px; height: 16px; }
 
 /* ====== Suggestions dropdown ====== */
 .dshdian-suggestions {
 	position: absolute;
 	bottom: 100%;
-	left: 0;
-	right: 0;
+	left: 0; right: 0;
 	z-index: 10;
-	background: var(--background-modifier-form-field);
+	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 10px;
-	box-shadow: var(--shadow-s);
+	box-shadow: 0 4px 12px rgba(0,0,0,0.12);
 	max-height: 200px;
 	overflow-y: auto;
 	margin-bottom: 4px;
@@ -375,33 +413,23 @@
 	font-size: 13px;
 	cursor: pointer;
 	border-bottom: 1px solid var(--background-modifier-border);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 	color: var(--text-normal);
 }
-
-.dshdian-suggestion-item:last-child {
-	border-bottom: none;
-}
-
-.dshdian-suggestion-item:hover {
-	background: var(--background-modifier-hover);
-}
+.dshdian-suggestion-item:last-child { border-bottom: none; }
+.dshdian-suggestion-item:hover { background: var(--background-modifier-hover); }
 
 /* ====== Code blocks ====== */
 .dshdian-message-assistant pre {
 	position: relative;
 	background: var(--code-background);
-	border-radius: 8px;
+	border-radius: 12px;
 	padding: 12px 16px;
 	overflow-x: auto;
 }
 
 .dshdian-copy-btn {
 	position: absolute;
-	top: 6px;
-	right: 6px;
+	top: 6px; right: 6px;
 	padding: 2px 8px;
 	border-radius: 4px;
 	border: 1px solid var(--background-modifier-border);
@@ -412,300 +440,10 @@
 	opacity: 0;
 	transition: opacity 0.15s;
 }
+.dshdian-message-assistant pre:hover .dshdian-copy-btn { opacity: 1; }
+.dshdian-copy-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 
-.dshdian-message-assistant pre:hover .dshdian-copy-btn {
-	opacity: 1;
-}
-
-.dshdian-copy-btn:hover {
-	background: var(--background-modifier-hover);
-	color: var(--text-normal);
-}
-
-/* ====== Approval UI ====== */
-.dshdian-approval-request {
-	padding: 10px 12px;
-	margin: 6px 0;
-	border-radius: 8px;
-	background: var(--background-secondary);
-	border: 1px solid var(--color-orange);
-}
-
-.dshdian-approval-desc {
-	font-size: 13px;
-	margin-bottom: 8px;
-	color: var(--text-normal);
-}
-
-.dshdian-approval-buttons {
-	display: flex;
-	gap: 8px;
-}
-
-.dshdian-approve-btn,
-.dshdian-reject-btn {
-	padding: 4px 12px;
-	border-radius: 6px;
-	font-size: 12px;
-	font-weight: 600;
-	cursor: pointer;
-	border: none;
-	color: white;
-}
-
-.dshdian-approve-btn {
-	background: var(--color-green);
-}
-
-.dshdian-reject-btn {
-	background: var(--color-red);
-}
-
-.dshdian-approve-btn:hover,
-.dshdian-reject-btn:hover {
-	opacity: 0.9;
-}
-
-/* ====== Notification ====== */
-.dshdian-notification {
-	padding: 4px 10px;
-	margin: 4px 0;
-	border-radius: 6px;
-	background: var(--background-secondary);
-	font-size: 11px;
-	color: var(--text-muted);
-	font-style: italic;
-}
-
-/* ====== Preview state ====== */
-.dshdian-preview-state {
-	padding: 10px 12px;
-	margin: 8px 0;
-	border-radius: 8px;
-	background: var(--background-secondary);
-	border: 1px solid var(--color-blue);
-}
-
-.dshdian-preview-label {
-	font-size: 13px;
-	font-weight: 600;
-	margin-bottom: 8px;
-	color: var(--text-normal);
-}
-
-.dshdian-preview-buttons {
-	display: flex;
-	gap: 6px;
-}
-
-.dshdian-preview-install-btn,
-.dshdian-preview-retry-btn,
-.dshdian-preview-abandon-btn {
-	padding: 4px 12px;
-	border-radius: 6px;
-	font-size: 12px;
-	font-weight: 600;
-	cursor: pointer;
-	border: none;
-	color: white;
-}
-
-.dshdian-preview-install-btn {
-	background: var(--color-green);
-}
-
-.dshdian-preview-retry-btn {
-	background: var(--color-blue);
-}
-
-.dshdian-preview-abandon-btn {
-	background: var(--color-red);
-}
-
-.dshdian-preview-install-btn:hover,
-.dshdian-preview-retry-btn:hover,
-.dshdian-preview-abandon-btn:hover {
-	opacity: 0.9;
-}
-
-/* ====== History overlay ====== */
-.dshdian-history-overlay {
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background: rgba(0, 0, 0, 0.4);
-	z-index: 100;
-	display: flex;
-	align-items: flex-start;
-	justify-content: center;
-	padding-top: 40px;
-}
-
-.dshdian-history-panel {
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
-	width: 90%;
-	max-width: 400px;
-	max-height: 60vh;
-	display: flex;
-	flex-direction: column;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-}
-
-.dshdian-history-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--background-modifier-border);
-	font-weight: 600;
-}
-
-.dshdian-history-close {
-	padding: 4px;
-}
-
-.dshdian-history-list {
-	overflow-y: auto;
-	flex: 1;
-}
-
-.dshdian-history-empty {
-	padding: 24px;
-	text-align: center;
-	color: var(--text-muted);
-}
-
-.dshdian-history-item {
-	padding: 10px 16px;
-	cursor: pointer;
-	border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.dshdian-history-item:hover {
-	background: var(--background-modifier-hover);
-}
-
-.dshdian-history-item-active {
-	background: var(--background-modifier-active-hover);
-	border-left: 3px solid var(--interactive-accent);
-}
-
-.dshdian-history-title {
-	font-size: 14px;
-	font-weight: 500;
-	color: var(--text-normal);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.dshdian-history-time {
-	font-size: 11px;
-	color: var(--text-muted);
-	margin-top: 2px;
-}
-
-/* ====== Reasoning Block (Phase 2) ====== */
-.dshdian-reasoning {
-	margin-bottom: 8px;
-	border-radius: 6px;
-	background: var(--background-secondary);
-	overflow: hidden;
-}
-
-.dshdian-reasoning-summary {
-	padding: 6px 12px;
-	font-size: 12px;
-	color: var(--text-muted);
-	cursor: pointer;
-	font-style: italic;
-	user-select: none;
-}
-
-.dshdian-reasoning-summary:hover {
-	color: var(--text-normal);
-}
-
-.dshdian-reasoning-content {
-	padding: 4px 12px 8px;
-	font-size: 13px;
-	color: var(--text-muted);
-	line-height: 1.5;
-	white-space: pre-wrap;
-}
-
-/* ====== Tool Call Card (Phase 2) ====== */
-.dshdian-tool-card {
-	border-radius: 8px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
-	overflow: hidden;
-	margin: 4px 0;
-}
-
-.dshdian-tool-card-header {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 8px 12px;
-	cursor: pointer;
-	user-select: none;
-}
-
-.dshdian-tool-card-header:hover {
-	background: var(--background-modifier-hover);
-}
-
-.dshdian-tool-card-icon {
-	font-size: 14px;
-}
-
-.dshdian-tool-card-name {
-	font-family: var(--font-monospace);
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text-normal);
-}
-
-.dshdian-tool-card-status {
-	font-size: 11px;
-	color: var(--text-muted);
-	margin-left: auto;
-}
-
-.dshdian-tool-card-args,
-.dshdian-tool-card-result {
-	display: none;
-	padding: 4px 12px 8px;
-	font-size: 12px;
-	font-family: var(--font-monospace);
-	color: var(--text-muted);
-	white-space: pre-wrap;
-	word-break: break-all;
-}
-
-.dshdian-tool-card-expanded .dshdian-tool-card-args,
-.dshdian-tool-card-expanded .dshdian-tool-card-result {
-	display: block;
-}
-
-.dshdian-tool-card-running {
-	border-left: 3px solid var(--color-blue);
-}
-
-.dshdian-tool-card-completed {
-	border-left: 3px solid var(--color-green);
-}
-
-.dshdian-tool-card-failed {
-	border-left: 3px solid var(--color-red);
-}
-
-/* ====== Message Action Buttons (Phase 2) ====== */
+/* ====== Message actions (Copy only) ====== */
 .dshdian-message-actions {
 	display: flex;
 	gap: 4px;
@@ -713,26 +451,9 @@
 	opacity: 0;
 	transition: opacity 0.15s;
 }
-
-.dshdian-message-assistant:hover .dshdian-message-actions {
-	opacity: 1;
-}
-
-.dshdian-action-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	border-radius: 4px;
-	border: none;
-	background: transparent;
-	color: var(--text-muted);
-	cursor: pointer;
-}
+.dshdian-message-assistant:hover .dshdian-message-actions { opacity: 1; }
 
 .dshdian-copy-action {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
 	padding: 4px 12px;
 	border-radius: 6px;
 	border: 1px solid var(--background-modifier-border);
@@ -741,95 +462,24 @@
 	font-size: 12px;
 	cursor: pointer;
 }
+.dshdian-copy-action:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 
-.dshdian-copy-action:hover {
-	background: var(--background-modifier-hover);
-	color: var(--text-normal);
-}
-
-/* ====== Question Card (Phase 2) ====== */
-.dshdian-question-card {
+/* ====== Approval request ====== */
+.dshdian-approval-request {
 	padding: 12px;
 	margin: 6px 0;
 	border-radius: 8px;
 	background: var(--background-secondary);
-	border: 1px solid var(--color-blue);
+	border: 1px solid var(--color-orange);
 }
 
-.dshdian-question-header {
-	font-size: 13px;
-	font-weight: 700;
-	color: var(--text-normal);
-	margin-bottom: 4px;
-}
-
-.dshdian-question-text {
-	font-size: 14px;
-	color: var(--text-normal);
-	margin-bottom: 8px;
-}
-
-.dshdian-question-detail {
-	font-size: 12px;
-	color: var(--text-muted);
-	margin-bottom: 8px;
-}
-
-.dshdian-question-options {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	margin-bottom: 8px;
-}
-
-.dshdian-question-option {
-	display: flex;
-	flex-direction: column;
-	padding: 8px 12px;
-	border-radius: 6px;
-	border: 1px solid var(--background-modifier-border);
-	cursor: pointer;
-	transition: border-color 0.15s, background 0.15s;
-}
-
-.dshdian-question-option:hover {
-	background: var(--background-modifier-hover);
-}
-
-.dshdian-question-option-selected {
-	border-color: var(--interactive-accent);
-	background: var(--background-modifier-hover);
-}
-
-.dshdian-question-option-label {
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text-normal);
-}
-
-.dshdian-question-option-desc {
-	font-size: 11px;
-	color: var(--text-muted);
-}
-
-.dshdian-question-input {
-	width: 100%;
-	padding: 6px 10px;
-	border-radius: 6px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
-	color: var(--text-normal);
-	font-size: 13px;
-	margin-bottom: 8px;
-}
-
-.dshdian-question-buttons {
-	display: flex;
-	gap: 8px;
-}
-
-.dshdian-question-confirm-btn,
-.dshdian-question-cancel-btn {
+.dshdian-approval-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.dshdian-approval-icon { font-size: 16px; }
+.dshdian-approval-title { font-size: 13px; font-weight: 700; color: var(--color-orange); }
+.dshdian-approval-tool { font-family: var(--font-monospace); font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.dshdian-approval-desc { font-size: 13px; margin-bottom: 8px; color: var(--text-normal); }
+.dshdian-approval-buttons { display: flex; gap: 8px; }
+.dshdian-approve-btn, .dshdian-reject-btn {
 	padding: 4px 12px;
 	border-radius: 6px;
 	font-size: 12px;
@@ -838,154 +488,118 @@
 	border: none;
 	color: white;
 }
+.dshdian-approve-btn { background: var(--color-green); }
+.dshdian-reject-btn { background: var(--color-red); }
+.dshdian-approve-btn:hover, .dshdian-reject-btn:hover { opacity: 0.9; }
 
-.dshdian-question-confirm-btn {
-	background: var(--interactive-accent);
-}
-
-.dshdian-question-cancel-btn {
-	background: var(--text-muted);
-}
-
-.dshdian-question-confirm-btn:hover,
-.dshdian-question-cancel-btn:hover {
-	opacity: 0.9;
-}
-
-/* ====== Mode Suggestion (Phase 3) ====== */
-.dshdian-mode-suggestion {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 8px 12px;
-	margin: 4px 0;
+/* ====== Question card ====== */
+.dshdian-question-card {
+	padding: 12px;
+	margin: 6px 0;
 	border-radius: 8px;
 	background: var(--background-secondary);
-	border: 1px solid var(--color-yellow);
-	animation: dshdian-fade-in 0.2s ease;
+	border: 1px solid var(--color-blue);
 }
-
-@keyframes dshdian-fade-in {
-	from { opacity: 0; transform: translateY(4px); }
-	to { opacity: 1; transform: translateY(0); }
-}
-
-.dshdian-mode-suggestion-text {
-	font-size: 12px;
-	color: var(--text-normal);
-	flex: 1;
-}
-
-.dshdian-mode-suggestion-btn {
-	padding: 4px 10px;
+.dshdian-question-header { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.dshdian-question-text { font-size: 14px; margin-bottom: 8px; }
+.dshdian-question-detail { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.dshdian-question-options { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.dshdian-question-option {
+	padding: 8px 12px;
 	border-radius: 6px;
-	border: none;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	font-size: 12px;
-	font-weight: 600;
+	border: 1px solid var(--background-modifier-border);
 	cursor: pointer;
-	white-space: nowrap;
 }
-
-.dshdian-mode-suggestion-btn:hover {
-	opacity: 0.9;
+.dshdian-question-option:hover { background: var(--background-modifier-hover); }
+.dshdian-question-option-selected { border-color: var(--interactive-accent); background: var(--background-modifier-hover); }
+.dshdian-question-option-label { font-size: 13px; font-weight: 600; }
+.dshdian-question-option-desc { font-size: 11px; color: var(--text-muted); }
+.dshdian-question-input {
+	width: 100%; padding: 6px 10px; border-radius: 6px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary); color: var(--text-normal);
+	font-size: 13px; margin-bottom: 8px;
 }
-
-/* ====== Theme Adaptation (Phase 4) ====== */
-
-/* Ensure proper contrast in light theme */
-.theme-light .dshdian-message-user {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+.dshdian-question-buttons { display: flex; gap: 8px; }
+.dshdian-question-confirm-btn, .dshdian-question-cancel-btn {
+	padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+	cursor: pointer; border: none; color: white;
 }
+.dshdian-question-confirm-btn { background: var(--interactive-accent); }
+.dshdian-question-cancel-btn { background: var(--text-muted); }
 
-.theme-light .dshdian-tool-card {
-	background: var(--background-secondary);
-	border-color: var(--background-modifier-border);
-}
-
-.theme-light .dshdian-reasoning {
-	background: var(--background-secondary-alt, var(--background-secondary));
-}
-
-.theme-light .dshdian-approval-request {
-	background: var(--background-secondary);
-}
-
-.theme-light .dshdian-question-card {
-	background: var(--background-secondary);
-}
-
-/* Dark theme specific */
-.theme-dark .dshdian-composer {
-	border-color: var(--background-modifier-border);
-	background: var(--background-primary);
-}
-
-.theme-dark .dshdian-history-panel {
-	background: var(--background-primary);
-	border-color: var(--background-modifier-border);
-}
-
-/* Scrollbar styling for chat */
-.dshdian-message-list::-webkit-scrollbar {
-	width: 6px;
-}
-
-.dshdian-message-list::-webkit-scrollbar-thumb {
-	background: var(--background-modifier-border);
-	border-radius: 3px;
-}
-
-.dshdian-message-list::-webkit-scrollbar-thumb:hover {
-	background: var(--text-faint);
-}
-
-/* Smooth transitions */
-.dshdian-message {
+/* ====== Mode suggestion ====== */
+.dshdian-mode-suggestion {
+	display: flex; align-items: center; gap: 8px;
+	padding: 8px 12px; margin: 4px 0;
+	border-radius: 8px; background: var(--background-secondary);
+	border: 1px solid var(--color-yellow);
 	animation: dshdian-msg-in 0.2s ease;
 }
-
-@keyframes dshdian-msg-in {
-	from { opacity: 0; transform: translateY(8px); }
-	to { opacity: 1; transform: translateY(0); }
+.dshdian-mode-suggestion-text { font-size: 12px; color: var(--text-normal); flex: 1; }
+.dshdian-mode-suggestion-btn {
+	padding: 4px 10px; border-radius: 6px; border: none;
+	background: var(--interactive-accent); color: var(--text-on-accent);
+	font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 
-/* Focus states for accessibility */
-.dshdian-input:focus {
-	outline: none;
-	box-shadow: none;
+/* ====== Notification ====== */
+.dshdian-notification {
+	padding: 4px 10px; margin: 4px 0;
+	border-radius: 6px; background: var(--background-secondary);
+	font-size: 11px; color: var(--text-muted); font-style: italic;
 }
 
-.dshdian-composer:focus-within {
-	border-color: var(--interactive-accent);
+/* ====== History overlay ====== */
+.dshdian-history-overlay {
+	position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+	background: rgba(0,0,0,0.4); z-index: 100;
+	display: flex; align-items: flex-start; justify-content: center;
+	padding-top: 40px;
 }
-
-/* Tool card animation */
-.dshdian-tool-card {
-	transition: border-color 0.2s, background 0.2s;
+.dshdian-history-panel {
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	width: 90%; max-width: 400px; max-height: 60vh;
+	display: flex; flex-direction: column;
+	box-shadow: 0 8px 24px rgba(0,0,0,0.15);
 }
-
-/* Responsive: narrow panels */
-@media (max-width: 350px) {
-	.dshdian-message-user {
-		max-width: 95%;
-	}
-	.dshdian-toolbar {
-		flex-wrap: wrap;
-	}
+.dshdian-history-header {
+	display: flex; align-items: center; justify-content: space-between;
+	padding: 12px 16px; border-bottom: 1px solid var(--background-modifier-border);
+	font-weight: 600;
 }
+.dshdian-history-list { overflow-y: auto; flex: 1; }
+.dshdian-history-empty { padding: 24px; text-align: center; color: var(--text-muted); }
+.dshdian-history-item {
+	padding: 10px 16px; cursor: pointer;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+.dshdian-history-item:hover { background: var(--background-modifier-hover); }
+.dshdian-history-item-active { background: var(--background-modifier-active-hover); border-left: 3px solid var(--interactive-accent); }
+.dshdian-history-title { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dshdian-history-time { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-/* ====== File path links (Phase 4) ====== */
+/* ====== Preview state ====== */
+.dshdian-preview-state {
+	padding: 10px 12px; margin: 8px 0;
+	border-radius: 8px; background: var(--background-secondary);
+	border: 1px solid var(--color-blue);
+}
+.dshdian-preview-label { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.dshdian-preview-buttons { display: flex; gap: 6px; }
+.dshdian-preview-install-btn, .dshdian-preview-retry-btn, .dshdian-preview-abandon-btn {
+	padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+	cursor: pointer; border: none; color: white;
+}
+.dshdian-preview-install-btn { background: var(--color-green); }
+.dshdian-preview-retry-btn { background: var(--color-blue); }
+.dshdian-preview-abandon-btn { background: var(--color-red); }
+
+/* ====== File link ====== */
 .dshdian-file-link {
-	color: var(--link-color);
-	cursor: pointer;
-	text-decoration: underline;
-	text-decoration-style: dotted;
+	color: var(--link-color); cursor: pointer;
+	text-decoration: underline; text-decoration-style: dotted;
 }
-
-.dshdian-file-link:hover {
-	text-decoration-style: solid;
-	opacity: 0.8;
-}
+.dshdian-file-link:hover { text-decoration-style: solid; }
