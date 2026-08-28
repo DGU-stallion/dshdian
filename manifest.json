@@ -1,0 +1,9 @@
+{
+  "id": "dshdian",
+  "name": "Dshdian",
+  "version": "0.0.1",
+  "minAppVersion": "1.5.0",
+  "description": "Embed DSH (DeepSeek Harness) as an AI collaborator — chat, manage vault, and generate native Obsidian plugins through conversation.",
+  "author": "DGU-stallion",
+  "isDesktopOnly": true
+}

@@ -1,3 +1,5 @@
+> ⚠️ 本文档为早期研究归档。Dshdian 最终选择了外部 Harness 进程 + 原生插件生成路线（非进程内 Cordis），详见 docs/adr/。本文档仅作为竞品分析参考保留。
+
 # DeepSeek Harness × Obsidian 集成研究报告
 
 > 研究日期：2026-08-26
@@ -354,7 +356,7 @@ stopped ──────→ running ──────→ error
 
 ---
 
-## 七、对 dshdian 项目的启示
+## 七、对 Dshdian 项目的启示
 
 ### 7.1 可直接复用的设计
 

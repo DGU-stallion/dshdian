@@ -1,0 +1,24 @@
+# Build output
+main.js
+*.js.map
+
+# Dependencies
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Obsidian plugin dev
+data.json
+
+# Generated plugin preview (temporary)
+_dshdian_preview/
+
+# Kiro CLI local config
+.kiro/skills/
+skills-lock.json
