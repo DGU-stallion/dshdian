@@ -69,6 +69,7 @@ export default class DshdianPlugin extends Plugin {
 				onAddContext: () => this.handleAddContext(),
 				onSaveAsNote: (content) => this.handleSaveAsNote(content),
 				onRetryMessage: () => this.handleRetryMessage(),
+				onOpenFile: (path) => this.handleOpenFile(path),
 			});
 			view.setMode(this.settings.defaultMode);
 			view.setModel(this.settings.defaultModel);
@@ -78,6 +79,49 @@ export default class DshdianPlugin extends Plugin {
 		// Ribbon icon to open/focus the chat panel
 		this.addRibbonIcon(ICON_NAME, "Open Dshdian", () => {
 			this.activateView();
+		});
+
+		// Keyboard shortcuts
+		this.addCommand({
+			id: "focus-input",
+			name: "Focus chat input",
+			hotkeys: [{ modifiers: ["Mod"], key: "l" }],
+			callback: () => {
+				const view = this.getChatView();
+				if (view) view.focusInput();
+			},
+		});
+
+		this.addCommand({
+			id: "new-chat",
+			name: "New chat",
+			hotkeys: [{ modifiers: ["Mod"], key: "n" }],
+			callback: () => {
+				this.handleNewChat();
+			},
+		});
+
+		this.addCommand({
+			id: "cancel-stream",
+			name: "Cancel streaming",
+			hotkeys: [{ modifiers: [], key: "Escape" }],
+			callback: () => {
+				if (this.isStreaming) {
+					const sid = this.modeManager.getSessionId();
+					if (sid) {
+						this.client.cancelSession(sid).catch(() => {});
+					}
+				}
+			},
+		});
+
+		// Command: open chat in a new split pane (multi-session)
+		this.addCommand({
+			id: "open-new-pane",
+			name: "Open chat in new pane",
+			callback: () => {
+				this.openNewChatPane();
+			},
 		});
 
 		// Settings tab
@@ -328,8 +372,63 @@ export default class DshdianPlugin extends Plugin {
 				}
 				break;
 			}
+			case "host/remote-event": {
+				const event = f.event as string;
+				const args = f.args as unknown[];
+				this.handleRemoteEvent(event, args);
+				break;
+			}
 			default:
 				// Workspace events, session-added/removed — not needed for MVP
+				break;
+		}
+	}
+
+	/** Handle remote events from DSH (GUI Action Bridge) */
+	private handleRemoteEvent(event: string, args: unknown[]): void {
+		switch (event) {
+			case "open-file": {
+				const path = args[0] as string;
+				if (path) this.app.workspace.openLinkText(path, "", false);
+				break;
+			}
+			case "open-file-split": {
+				const path = args[0] as string;
+				if (path) this.app.workspace.openLinkText(path, "", true);
+				break;
+			}
+			case "create-note": {
+				const path = args[0] as string;
+				const content = (args[1] as string) ?? "";
+				if (path) {
+					this.app.vault.create(path, content).then(() => {
+						this.app.workspace.openLinkText(path, "", false);
+					}).catch((e) => {
+						console.warn("Dshdian: create-note failed", e);
+					});
+				}
+				break;
+			}
+			case "navigate-heading": {
+				const path = args[0] as string;
+				const heading = args[1] as string;
+				if (path && heading) {
+					this.app.workspace.openLinkText(`${path}#${heading}`, "", false);
+				}
+				break;
+			}
+			case "reveal-in-explorer": {
+				const path = args[0] as string;
+				if (path) {
+					const file = this.app.vault.getAbstractFileByPath(path);
+					if (file) {
+						(this.app as any).internalPlugins?.plugins?.["file-explorer"]?.instance?.revealInFolder(file);
+					}
+				}
+				break;
+			}
+			default:
+				console.warn(`Dshdian: unknown remote event: ${event}`);
 				break;
 		}
 	}
@@ -438,6 +537,12 @@ export default class DshdianPlugin extends Plugin {
 				HarnessClient.buildMessage("system", "DSH Harness is not connected. Check settings or start the harness.")
 			);
 			return;
+		}
+
+		// Handle slash commands
+		if (content.startsWith("/")) {
+			const handled = await this.handleSlashCommand(content, view);
+			if (handled) return;
 		}
 
 		// Parse @references
@@ -662,6 +767,81 @@ export default class DshdianPlugin extends Plugin {
 		}
 	}
 
+	private async handleSlashCommand(content: string, view: ChatPanelView): Promise<boolean> {
+		const [cmd, ...args] = content.slice(1).split(" ");
+		switch (cmd) {
+			case "clear":
+				view.clearMessages();
+				view.setSessionTitle("");
+				return true;
+			case "suggest": {
+				const activeFile = this.app.workspace.getActiveFile();
+				if (!activeFile) {
+					view.addMessage(HarnessClient.buildMessage("system", "No active note open."));
+					return true;
+				}
+				const noteContent = await this.app.vault.cachedRead(activeFile);
+				const prompt = `Analyze this note and suggest improvements (better tags, internal links to create, formatting improvements, missing metadata):\n\nFile: ${activeFile.path}\n\n${noteContent}`;
+				view.addMessage(HarnessClient.buildMessage("user", `/suggest ${activeFile.path}`));
+				let sid = this.modeManager.getSessionId();
+				if (!sid) {
+					await this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
+					sid = this.modeManager.getSessionId();
+				}
+				if (sid) {
+					await this.client.sendMessage(sid, prompt);
+				}
+				return true;
+			}
+			case "concept": {
+				const topic = args.join(" ") || "the vault structure";
+				const vaultIndex = this.vaultIndexer.getIndex();
+				const prompt = `Generate a Mermaid concept map diagram showing relationships between the main concepts in: ${topic}\n\nVault context:\n${vaultIndex}\n\nOutput a valid Mermaid flowchart diagram wrapped in a \`\`\`mermaid code block.`;
+				view.addMessage(HarnessClient.buildMessage("user", `/concept ${topic}`));
+				let sid = this.modeManager.getSessionId();
+				if (!sid) {
+					await this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
+					sid = this.modeManager.getSessionId();
+				}
+				if (sid) {
+					await this.client.sendMessage(sid, prompt);
+				}
+				return true;
+			}
+			case "batch": {
+				const instruction = args.join(" ");
+				if (!instruction) {
+					view.addMessage(HarnessClient.buildMessage("system", "Usage: /batch <instruction>\nApplies the instruction to all notes in the current folder."));
+					return true;
+				}
+				const activeFile = this.app.workspace.getActiveFile();
+				const folder = activeFile?.parent?.path ?? "";
+				const files = this.app.vault.getMarkdownFiles()
+					.filter(f => f.path.startsWith(folder + "/") || (!folder && !f.path.includes("/")))
+					.slice(0, 20); // Limit to 20 files
+				const fileList = files.map(f => f.path).join("\n");
+				const prompt = `Batch operation on ${files.length} notes in folder "${folder || "/"}":\n\nInstruction: ${instruction}\n\nFiles:\n${fileList}\n\nProcess each file according to the instruction. Show what changes you'll make before executing.`;
+				view.addMessage(HarnessClient.buildMessage("user", `/batch ${instruction}`));
+				let sid = this.modeManager.getSessionId();
+				if (!sid) {
+					await this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
+					sid = this.modeManager.getSessionId();
+				}
+				if (sid) {
+					await this.client.sendMessage(sid, prompt);
+				}
+				return true;
+			}
+			case "mode":
+			case "model":
+			case "help":
+				// These are handled by the suggestions UI, not as actual commands
+				return false;
+			default:
+				return false;
+		}
+	}
+
 	private async handleSaveAsNote(content: string): Promise<void> {
 		const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 		const path = `Dshdian Notes/${timestamp}.md`;
@@ -689,8 +869,17 @@ export default class DshdianPlugin extends Plugin {
 		view.addMessage(HarnessClient.buildMessage("system", "Retrying..."));
 	}
 
+	private handleOpenFile(filePath: string): void {
+		const file = this.app.vault.getAbstractFileByPath(filePath);
+		if (file) {
+			this.app.workspace.openLinkText(filePath, "", false);
+		} else {
+			new Notice(`File not found: ${filePath}`);
+		}
+	}
+
 	private getAvailableCommands(): string[] {
-		return ["clear", "mode", "model", "help"];
+		return ["clear", "mode", "model", "suggest", "concept", "batch", "help"];
 	}
 
 	private async checkNoGitWarning(): Promise<void> {
@@ -775,6 +964,17 @@ export default class DshdianPlugin extends Plugin {
 	private getChatView(): ChatPanelView | null {
 		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CHAT);
 		if (leaves.length === 0) return null;
+		// Prefer the active leaf if it's a chat view
+		const active = this.app.workspace.activeLeaf;
+		if (active && leaves.includes(active)) {
+			return active.view as ChatPanelView;
+		}
 		return leaves[0].view as ChatPanelView;
+	}
+
+	private async openNewChatPane(): Promise<void> {
+		const leaf = this.app.workspace.getLeaf("split");
+		await leaf.setViewState({ type: VIEW_TYPE_CHAT, active: true });
+		this.app.workspace.revealLeaf(leaf);
 	}
 }
