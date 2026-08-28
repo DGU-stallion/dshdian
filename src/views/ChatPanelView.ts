@@ -1,7 +1,7 @@
 import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
 import { Mode } from "../types";
 import { renderMarkdown } from "./MarkdownRenderer";
-import type { ChatMessage, ToolCallInfo } from "../types";
+import type { ChatMessage } from "../types";
 
 export const VIEW_TYPE_CHAT = "dshdian-chat-view";
 
@@ -171,7 +171,7 @@ export class ChatPanelView extends ItemView {
 
 		// [+] Add context
 		const addCtxBtn = toolbar.createEl("button", {
-			cls: "clickable-icon dshdian-toolbar-btn",
+			cls: "dshdian-add-btn",
 			attr: { "aria-label": "Add context" },
 		});
 		setIcon(addCtxBtn, "plus");
@@ -181,7 +181,7 @@ export class ChatPanelView extends ItemView {
 
 		// Mode button - shows display name, click opens Menu
 		this.modeBtn = toolbar.createEl("button", {
-			cls: "dshdian-toolbar-btn dshdian-agent-btn",
+			cls: "dshdian-toolbar-select",
 		});
 		this.modeBtn.textContent = ChatPanelView.MODE_DISPLAY_NAMES[this.currentMode];
 		this.modeBtn.addEventListener("click", (e) => {
@@ -194,20 +194,39 @@ export class ChatPanelView extends ItemView {
 
 		// Model button - shows model name
 		this.modelBtn = toolbar.createEl("button", {
-			cls: "dshdian-toolbar-btn dshdian-model-btn",
+			cls: "dshdian-toolbar-select",
 		});
 		this.modelBtn.textContent = this.currentModel;
 
 		// Spacer
 		toolbar.createEl("span", { cls: "dshdian-toolbar-spacer" });
 
-		// Context meter
+		// Context meter (SVG ring)
 		this.contextMeterEl = toolbar.createEl("span", { cls: "dshdian-context-meter" });
-		this.contextMeterEl.textContent = "0";
+		const svgNS = "http://www.w3.org/2000/svg";
+		const svg = document.createElementNS(svgNS, "svg");
+		svg.setAttribute("viewBox", "0 0 14 14");
+		const track = document.createElementNS(svgNS, "circle");
+		track.setAttribute("cx", "7");
+		track.setAttribute("cy", "7");
+		track.setAttribute("r", "5");
+		track.classList.add("dshdian-context-meter-track");
+		const fill = document.createElementNS(svgNS, "circle");
+		fill.setAttribute("cx", "7");
+		fill.setAttribute("cy", "7");
+		fill.setAttribute("r", "5");
+		fill.classList.add("dshdian-context-meter-fill");
+		// Full circumference = 2π*5 ≈ 31.4
+		fill.setAttribute("stroke-dasharray", "31.4");
+		fill.setAttribute("stroke-dashoffset", "31.4");
+		fill.setAttribute("transform", "rotate(-90 7 7)");
+		svg.appendChild(track);
+		svg.appendChild(fill);
+		this.contextMeterEl.appendChild(svg);
 		this.contextMeterEl.title = "Tokens: 0 / 128k";
 
 		// Send button
-		const sendBtn = toolbar.createEl("button", { cls: "clickable-icon dshdian-send-btn" });
+		const sendBtn = toolbar.createEl("button", { cls: "dshdian-send-btn" });
 		setIcon(sendBtn, "arrow-up");
 		sendBtn.addEventListener("click", () => {
 			this.handleSend();
@@ -216,11 +235,11 @@ export class ChatPanelView extends ItemView {
 
 	async onClose(): Promise<void> {
 		if (this.streamRenderTimer !== null) {
-			clearTimeout(this.streamRenderTimer);
+			cancelAnimationFrame(this.streamRenderTimer as unknown as number);
 			this.streamRenderTimer = null;
 		}
 		if (this.reasoningRenderTimer !== null) {
-			clearTimeout(this.reasoningRenderTimer);
+			cancelAnimationFrame(this.reasoningRenderTimer as unknown as number);
 			this.reasoningRenderTimer = null;
 		}
 		this.messageListEl = null;
@@ -303,20 +322,19 @@ export class ChatPanelView extends ItemView {
 		this.scrollToBottom();
 	}
 
-	/** Append a token to the currently streaming message */
+	/** Append a token to the currently streaming message (rAF batched) */
 	appendStreamToken(token: string): void {
 		if (!this.streamingContentEl) return;
 		this.streamingText += token;
-		// Show plain text immediately for responsiveness
 		this.streamingContentEl.textContent = this.streamingText;
-		// Debounced markdown render
+		// Batch markdown render to animation frame
 		if (this.streamRenderTimer === null) {
-			this.streamRenderTimer = setTimeout(() => {
+			this.streamRenderTimer = requestAnimationFrame(() => {
 				this.streamRenderTimer = null;
 				if (this.streamingContentEl && this.streamingText) {
 					renderMarkdown(this.streamingContentEl, this.streamingText, "", this);
 				}
-			}, 100);
+			}) as unknown as ReturnType<typeof setTimeout>;
 		}
 		this.scrollToBottom();
 	}
@@ -340,43 +358,106 @@ export class ChatPanelView extends ItemView {
 		return content;
 	}
 
-	/** Append reasoning token to the collapsible thinking block */
+	/** Append reasoning token (rAF batched, DSH-style fold) */
 	appendReasoningToken(token: string): void {
 		const el = this.ensureReasoningBlock();
 		if (!el) return;
 		this.streamingReasoningText += token;
 		el.textContent = this.streamingReasoningText;
-		// Debounced render for reasoning
+		// Update summary with latest line while streaming
+		const details = el.parentElement;
+		if (details) {
+			const summary = details.querySelector(".dshdian-reasoning-summary");
+			if (summary) {
+				const lastLine = this.streamingReasoningText.trim().split("\n").pop() ?? "";
+				summary.textContent = `Think · ${lastLine.slice(0, 60)}`;
+			}
+		}
+		// rAF render
 		if (this.reasoningRenderTimer === null) {
-			this.reasoningRenderTimer = setTimeout(() => {
+			this.reasoningRenderTimer = requestAnimationFrame(() => {
 				this.reasoningRenderTimer = null;
 				if (this.streamingReasoningEl && this.streamingReasoningText) {
 					renderMarkdown(this.streamingReasoningEl, this.streamingReasoningText, "", this);
 				}
-			}, 150);
+			}) as unknown as ReturnType<typeof setTimeout>;
 		}
 		this.scrollToBottom();
 	}
 
-	/** Show a tool call card with arguments */
+	/** Tool name → variant classification (matches DSH) */
+	private static readonly TOOL_VARIANTS: Record<string, string> = {
+		bash: "bash", pwsh: "bash",
+		obsidian_read: "read", read: "read", web_fetch: "read",
+		web_search: "search", grep: "search", glob: "search", obsidian_search: "search",
+		obsidian_write: "write", write: "write",
+		obsidian_create: "write", obsidian_delete: "write",
+		obsidian_move: "write", obsidian_rename: "write",
+		str_replace_editor: "edit", edit: "edit",
+		run_code: "code", esbuild: "code",
+	};
+
+	private static readonly VARIANT_ICONS: Record<string, string> = {
+		bash: "⚙️", read: "📖", search: "🔍", write: "✏️", edit: "✏️", code: "💻",
+	};
+
+	private static readonly VARIANT_TITLES: Record<string, string> = {
+		bash: "Bash", read: "Read", search: "Search", write: "Write", edit: "Edit", code: "Code",
+	};
+
+	/** Derive summary from tool args based on variant */
+	private deriveToolSummary(name: string, args?: string): string {
+		if (!args) return "";
+		try {
+			const parsed = JSON.parse(args);
+			const variant = ChatPanelView.TOOL_VARIANTS[name] ?? "";
+			switch (variant) {
+				case "bash": return parsed.command ?? parsed.description ?? "";
+				case "read": return parsed.path ?? parsed.file_path ?? parsed.url ?? "";
+				case "search": return parsed.query ?? parsed.pattern ?? parsed.url ?? "";
+				case "write": case "edit": return parsed.path ?? parsed.file_path ?? "";
+				case "code": return parsed.language ?? parsed.file ?? "";
+				default: return "";
+			}
+		} catch {
+			return args.length > 50 ? args.slice(0, 50) + "..." : args;
+		}
+	}
+
+	/** Show a tool call card (DSH variant style) */
 	addToolCallCard(name: string, args?: string): void {
 		if (!this.messageListEl) return;
-		const el = this.messageListEl.createDiv({ cls: "dshdian-tool-card dshdian-tool-card-running" });
+		const variant = ChatPanelView.TOOL_VARIANTS[name] ?? "other";
+		const icon = ChatPanelView.VARIANT_ICONS[variant] ?? "✨";
+		const title = ChatPanelView.VARIANT_TITLES[variant] ?? "Tool";
+		const summary = this.deriveToolSummary(name, args);
+
+		const el = this.messageListEl.createDiv({
+			cls: `dshdian-tool-card dshdian-tool-card-running`,
+			attr: { "data-variant": variant, "data-tool": name, "data-state": "running" },
+		});
 		el.dataset.toolName = name;
 
-		const headerEl = el.createDiv({ cls: "dshdian-tool-card-header" });
-		headerEl.createEl("span", { cls: "dshdian-tool-card-icon", text: "⚙️" });
-		headerEl.createEl("span", { cls: "dshdian-tool-card-name", text: name });
-		headerEl.createEl("span", { cls: "dshdian-tool-card-status", text: "running" });
-
-		if (args) {
-			const argsEl = el.createDiv({ cls: "dshdian-tool-card-args" });
-			const displayArgs = args.length > 200 ? args.slice(0, 200) + "..." : args;
-			this.linkifyPaths(argsEl, displayArgs);
+		// Collapsed row: [icon] [title] · [summary]
+		const row = el.createDiv({ cls: "dshdian-tool-card-row" });
+		row.createEl("span", { cls: "dshdian-tool-card-icon", text: icon });
+		row.createEl("span", { cls: "dshdian-tool-card-title", text: title });
+		if (summary) {
+			row.createEl("span", { cls: "dshdian-tool-card-sep", text: "·" });
+			row.createEl("span", { cls: "dshdian-tool-card-summary", text: summary });
 		}
 
-		// Click to toggle expand
-		headerEl.addEventListener("click", () => {
+		// Expandable body (hidden by default)
+		const body = el.createDiv({ cls: "dshdian-tool-card-body" });
+		if (args) {
+			const argsSection = body.createDiv({ cls: "dshdian-tool-card-section" });
+			argsSection.createEl("div", { cls: "dshdian-tool-card-label", text: "IN" });
+			const argsContent = argsSection.createDiv({ cls: "dshdian-tool-card-content" });
+			this.linkifyPaths(argsContent, args.length > 500 ? args.slice(0, 500) + "..." : args);
+		}
+
+		// Click row to expand/collapse
+		row.addEventListener("click", () => {
 			el.toggleClass("dshdian-tool-card-expanded", !el.hasClass("dshdian-tool-card-expanded"));
 		});
 
@@ -390,18 +471,21 @@ export class ChatPanelView extends ItemView {
 		for (let i = cards.length - 1; i >= 0; i--) {
 			const card = cards[i] as HTMLElement;
 			if (card.dataset.toolName === name) {
-				card.className = `dshdian-tool-card dshdian-tool-card-${status}`;
-				const statusEl = card.querySelector(".dshdian-tool-card-status");
-				if (statusEl) statusEl.textContent = status;
+				card.dataset.state = status;
+				card.removeClass("dshdian-tool-card-running");
+				card.addClass(`dshdian-tool-card-${status}`);
+				// Update icon
 				const iconEl = card.querySelector(".dshdian-tool-card-icon");
 				if (iconEl) iconEl.textContent = status === "completed" ? "✅" : "❌";
+				// Add result to body
 				if (result) {
-					let resultEl = card.querySelector(".dshdian-tool-card-result") as HTMLElement | null;
-					if (!resultEl) {
-						resultEl = card.createDiv({ cls: "dshdian-tool-card-result" });
+					const body = card.querySelector(".dshdian-tool-card-body");
+					if (body) {
+						const resultSection = (body as HTMLElement).createDiv({ cls: "dshdian-tool-card-section" });
+						resultSection.createEl("div", { cls: "dshdian-tool-card-label", text: "OUT" });
+						const resultContent = resultSection.createDiv({ cls: "dshdian-tool-card-content" });
+						this.linkifyPaths(resultContent, result);
 					}
-					resultEl.empty();
-					this.linkifyPaths(resultEl, result);
 				}
 				break;
 			}
@@ -411,22 +495,24 @@ export class ChatPanelView extends ItemView {
 	/** Finalize the streaming message — render as markdown */
 	finalizeStreamingMessage(): void {
 		if (this.streamRenderTimer !== null) {
-			clearTimeout(this.streamRenderTimer);
+			cancelAnimationFrame(this.streamRenderTimer as unknown as number);
 			this.streamRenderTimer = null;
 		}
 		if (this.reasoningRenderTimer !== null) {
-			clearTimeout(this.reasoningRenderTimer);
+			cancelAnimationFrame(this.reasoningRenderTimer as unknown as number);
 			this.reasoningRenderTimer = null;
 		}
 		// Finalize reasoning block
 		if (this.streamingReasoningEl && this.streamingReasoningText) {
 			renderMarkdown(this.streamingReasoningEl, this.streamingReasoningText, "", this);
-			// Collapse reasoning after completion
 			const details = this.streamingReasoningEl.parentElement;
 			if (details && details.tagName === "DETAILS") {
 				details.removeAttribute("open");
-				const summary = details.querySelector("summary");
-				if (summary) summary.textContent = "Thinking (click to expand)";
+				const summary = details.querySelector(".dshdian-reasoning-summary");
+				if (summary) {
+					const firstLine = this.streamingReasoningText.trim().split("\n")[0] ?? "";
+					summary.textContent = `Think · ${firstLine.slice(0, 60)}`;
+				}
 			}
 		}
 		this.streamingReasoningEl = null;
@@ -444,57 +530,6 @@ export class ChatPanelView extends ItemView {
 		this.streamingText = "";
 	}
 
-	/** Display a tool call event in the chat */
-	addToolCall(info: ToolCallInfo): void {
-		if (!this.messageListEl) return;
-		const el = this.messageListEl.createDiv({
-			cls: `dshdian-tool-call dshdian-tool-${info.status}`,
-		});
-		const icon = info.status === "running" ? "⚙" : info.status === "completed" ? "✓" : "✗";
-		el.createEl("span", { cls: "dshdian-tool-icon", text: icon });
-		el.createEl("span", { cls: "dshdian-tool-name", text: info.name });
-		if (info.result) {
-			el.createEl("span", { cls: "dshdian-tool-result", text: info.result });
-		}
-		// Collapsible detail
-		const detailEl = this.messageListEl.createDiv({ cls: "dshdian-tool-detail" });
-		detailEl.textContent = info.result ?? "";
-		el.addEventListener("click", () => {
-			el.toggleClass("dshdian-tool-expanded", !el.hasClass("dshdian-tool-expanded"));
-		});
-		this.scrollToBottom();
-	}
-
-	/** Update an existing tool call element */
-	updateToolCall(name: string, info: ToolCallInfo): void {
-		if (!this.messageListEl) return;
-		const els = this.messageListEl.querySelectorAll(".dshdian-tool-call");
-		for (let i = els.length - 1; i >= 0; i--) {
-			const nameEl = els[i].querySelector(".dshdian-tool-name");
-			if (nameEl && nameEl.textContent === name) {
-				const el = els[i] as HTMLElement;
-				el.className = `dshdian-tool-call dshdian-tool-${info.status}`;
-				const iconEl = el.querySelector(".dshdian-tool-icon");
-				if (iconEl) {
-					iconEl.textContent = info.status === "completed" ? "✓" : "✗";
-				}
-				if (info.result) {
-					let resultEl = el.querySelector(".dshdian-tool-result") as HTMLElement | null;
-					if (!resultEl) {
-						resultEl = el.createEl("span", { cls: "dshdian-tool-result" });
-					}
-					resultEl.textContent = info.result;
-					// Update detail
-					const nextEl = el.nextElementSibling;
-					if (nextEl && nextEl.hasClass("dshdian-tool-detail")) {
-						nextEl.textContent = info.result;
-					}
-				}
-				break;
-			}
-		}
-	}
-
 	/** Clear all messages from the display */
 	clearMessages(): void {
 		if (this.messageListEl) {
@@ -503,16 +538,6 @@ export class ChatPanelView extends ItemView {
 		this.streamingMsgEl = null;
 		this.streamingContentEl = null;
 		this.streamingText = "";
-	}
-
-	/** Show persistent no-git warning banner */
-	showNoGitWarning(): void {
-		if (!this.messageListEl) return;
-		if (this.messageListEl.querySelector(".dshdian-no-git-warning")) return;
-		const banner = document.createElement("div");
-		banner.className = "dshdian-no-git-warning";
-		banner.textContent = "⚠️ No git repository detected — all write operations will require confirmation.";
-		this.messageListEl.insertBefore(banner, this.messageListEl.firstChild);
 	}
 
 	/** Show inline approval request with Approve/Reject buttons */
@@ -652,9 +677,15 @@ export class ChatPanelView extends ItemView {
 		if (!this.contextMeterEl) return;
 		const usedK = used >= 1000 ? `${(used / 1000).toFixed(1)}k` : String(used);
 		const maxK = max >= 1000 ? `${Math.round(max / 1000)}k` : String(max);
-		this.contextMeterEl.textContent = usedK;
 		this.contextMeterEl.title = `Tokens: ${usedK} / ${maxK}`;
 		const ratio = used / max;
+		// Update SVG ring fill: circumference = 31.4, offset = circumference * (1 - ratio)
+		const circumference = 31.4;
+		const offset = circumference * (1 - ratio);
+		const fillEl = this.contextMeterEl.querySelector(".dshdian-context-meter-fill");
+		if (fillEl) {
+			fillEl.setAttribute("stroke-dashoffset", String(offset));
+		}
 		if (ratio > 0.8) {
 			this.contextMeterEl.addClass("dshdian-context-meter-warn");
 		} else {

@@ -20,11 +20,6 @@ export interface DshdianSettings {
 	maxContextLength: number;
 	includeFrontmatter: boolean;
 	autoContextFiles: string;
-	// 审批
-	autoApproveReads: boolean;
-	alwaysConfirm: boolean;
-	dangerKeywords: string;
-	protectedFolders: string;
 }
 
 export const DEFAULT_SETTINGS: DshdianSettings = {
@@ -41,10 +36,6 @@ export const DEFAULT_SETTINGS: DshdianSettings = {
 	maxContextLength: 50000,
 	includeFrontmatter: false,
 	autoContextFiles: "",
-	autoApproveReads: true,
-	alwaysConfirm: false,
-	dangerKeywords: "delete,remove,删除",
-	protectedFolders: "",
 };
 
 export class DshdianSettingTab extends PluginSettingTab {
@@ -248,57 +239,5 @@ export class DshdianSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// ──── 审批 ────
-		containerEl.createEl("h3", { text: "审批" });
-
-		new Setting(containerEl)
-			.setName("自动批准读操作")
-			.setDesc("跳过只读操作（搜索、列表、读取文件）的确认")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.autoApproveReads)
-					.onChange(async (value) => {
-						this.plugin.settings.autoApproveReads = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("始终需要确认")
-			.setDesc("对所有写操作都要求审批，即使有 git")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.alwaysConfirm)
-					.onChange(async (value) => {
-						this.plugin.settings.alwaysConfirm = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("危险关键词")
-			.setDesc("触发额外确认的关键词，逗号分隔")
-			.addText((text) =>
-				text
-					.setPlaceholder("delete,remove,删除")
-					.setValue(this.plugin.settings.dangerKeywords)
-					.onChange(async (value) => {
-						this.plugin.settings.dangerKeywords = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("受保护文件夹")
-			.setDesc("这些文件夹中的写操作始终需要确认，逗号分隔")
-			.addText((text) =>
-				text
-					.setPlaceholder("templates, daily-notes")
-					.setValue(this.plugin.settings.protectedFolders)
-					.onChange(async (value) => {
-						this.plugin.settings.protectedFolders = value;
-						await this.plugin.saveSettings();
-					})
-			);
 	}
 }
