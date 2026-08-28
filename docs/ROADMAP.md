@@ -26,17 +26,17 @@
 
 ---
 
-### 🔨 Phase 1: Bug 修复 + 核心可用性
+### ✅ Phase 1: Bug 修复 + 核心可用性（已完成 2026-08-28）
 
 目标：让当前 MVP 在日常使用中不出问题。Phase 1 完成后 GitHub Release 发版 + 提交 Obsidian 社区插件上架。
 
 | # | 功能 | 说明 | 状态 |
 |---|------|------|------|
-| 1 | 模式↔preset/permission 映射 | Chat→standard+read-only, Butler→standard+workspace-write, Creator→cordis | 🔲 |
-| 2 | 历史记录 cwd 过滤 | session.list 按 cwd===vaultPath 过滤，隔离 vault | 🔲 |
-| 3 | 流式 Markdown 实时渲染 | 增量渲染 + 防抖，不等响应完成 | 🔲 |
-| 4 | Session title 显示 | 从 session/projection 的 title 字段获取 | 🔲 |
-| 5 | Health check 绕过代理 | DshProcessManager 改用 Node http.get() 直连 | 🔲 |
+| 1 | 模式↔preset/permission 映射 | Chat→standard+read-only, Butler→standard+workspace-write, Creator→cordis | ✅ |
+| 2 | 历史记录 cwd 过滤 | session.list 按 cwd===vaultPath 过滤，隔离 vault | ✅ |
+| 3 | 流式 Markdown 实时渲染 | 增量渲染 + 防抖，不等响应完成 | ✅ |
+| 4 | Session title 显示 | 从 session/projection 的 title 字段获取 | ✅ |
+| 5 | Health check 绕过代理 | DshProcessManager 改用 Node http.get() 直连 | ✅ |
 
 **完成标志**：5 项全部完成 → dogfooding 2-3 天 → GitHub Release v0.1.0 → 提交 obsidian-releases PR
 

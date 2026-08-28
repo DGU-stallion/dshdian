@@ -1,6 +1,6 @@
 {
   "name": "dshdian",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Embed DSH (DeepSeek Harness) as an AI collaborator in Obsidian",
   "main": "main.js",
   "scripts": {
