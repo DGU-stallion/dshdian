@@ -107,7 +107,7 @@ export class ModeManager extends Events {
 			this.sessionId = await this.client.createSession(vaultPath);
 		} catch (e) {
 			// Session creation may fail if harness is down
-			console.warn("dshdian: failed to create session", e);
+			console.warn("Dshdian: failed to create session", e);
 			this.sessionId = null;
 		}
 

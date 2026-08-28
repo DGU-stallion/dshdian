@@ -1,8 +1,8 @@
-# dshdian
+# Dshdian
 
 将 [DSH (DeepSeek Harness)](https://github.com/DGU-stallion/dshdian) 作为 AI 协作者嵌入 Obsidian 的桌面端插件。
 
-核心差异化：通过对话生成**独立的 Obsidian 原生插件**——不绑定任何运行时，卸载 dshdian 后生成的插件仍可正常运行。
+核心差异化：通过对话生成**独立的 Obsidian 原生插件**——不绑定任何运行时，卸载 Dshdian 后生成的插件仍可正常运行。
 
 ## 功能特点
 
@@ -30,13 +30,13 @@
 ┌─────────────────────────────────────────┐
 │              Obsidian 桌面端              │
 │  ┌───────────────────────────────────┐  │
-│  │           dshdian 插件            │  │
+│  │          Dshdian 插件             │  │
 │  │  ┌─────┐  ┌─────┐  ┌──────┐     │  │
 │  │  │聊天 │  │管家 │  │创造  │     │  │
 │  │  └──┬──┘  └──┬──┘  └──┬───┘     │  │
 │  │     └────┬────┴────────┘         │  │
 │  └──────────┼────────────────────────┘  │
-│             │ HTTP API + SSE            │
+│             │ HTTP API + WebSocket       │
 └─────────────┼───────────────────────────┘
               ▼
 ┌─────────────────────┐
@@ -50,20 +50,25 @@ Vault 操作 → Obsidian CLI
 
 ## 开发状态
 
-🚧 **MVP 实现中** — 核心功能已完成，WebSocket 事件流对接待修复。
+✅ **MVP 已完成** — 核心功能端到端可用。
 
 ### 已完成
 - ✅ 插件脚手架 + Chat Panel
-- ✅ DSH 进程自动启动（独立 `dshdian` profile，端口 3180）
-- ✅ HTTP API 通信（session.create / session.prompt）
+- ✅ DSH 进程自动启动（独立 `Dshdian` profile，端口 3180）
+- ✅ HTTP API + WebSocket 双流通信
 - ✅ 三模式切换（聊天/管家/创造）
 - ✅ @引用文件 + fuzzy 搜索 + pill UI
 - ✅ Git 感知审批策略
 - ✅ 创造模式插件生成 pipeline
 - ✅ 设置面板（5 组配置）
+- ✅ 历史会话列表 + 切换
+- ✅ 文字选中复制
 
-### 待修复
-- ⚠️ WebSocket events.mux 在 Obsidian 中连接失败（DSH 端已正常处理）
+### 进行中（M2：功能完善）
+- 🔨 模式↔权限/preset 映射
+- 🔨 流式 Markdown 实时渲染
+- 🔨 Session title 显示
+- 🔨 Approval/Question 交互 UI
 
 ## License
 

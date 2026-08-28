@@ -1,6 +1,6 @@
-# 开发规划 — dshdian
+# 开发规划 — Dshdian
 
-> 最后更新: 2026-08-27
+> 最后更新: 2026-08-28
 
 ## 里程碑
 
@@ -38,7 +38,7 @@
 | 对话持久化/恢复（重启后恢复 session） | 待创建 | P2 | 🔲 |
 | Approval respond 验证 | 待创建 | P2 | 🔲 |
 | PR #21 合并到 main | — | P0 | 🔲 |
-| README 更新（标记 MVP 完成） | — | P1 | 🔲 |
+| README 更新（标记 MVP 完成） | — | P1 | ✅ |
 
 ---
 
@@ -89,14 +89,14 @@
 | 2026-08-27 | 用 Node.js `ws` 模块而非浏览器 WebSocket | Electron Origin header 被 DSH trust fence 拒绝 |
 | 2026-08-27 | esbuild alias ws→index.js + Node builtins external | ws 的 package.json browser 字段指向 stub |
 | 2026-08-27 | SessionEvent 数据在 `event.data` 中 | DSH 实际结构: `{ type, seq, time, data: {...} }` |
-| 2026-08-26 | 独立 `dshdian` profile (port 3180) | 避免与用户 web profile 冲突 |
+| 2026-08-26 | 独立 `Dshdian` profile (port 3180) | 避免与用户 web profile 冲突 |
 | 2026-08-26 | 不自建通信协议，复用 DSH 已有 | 减少维护成本，保持兼容 |
 
 ---
 
 ## DSH Agent Preset 参考
 
-| ID | 名称 | 适合 dshdian 模式 |
+| ID | 名称 | 适合 Dshdian 模式 |
 |----|------|-------------------|
 | `standard` | 标准模式 | 管家 (+ workspace-write permission) |
 | `code` | PTC 模式 | — |

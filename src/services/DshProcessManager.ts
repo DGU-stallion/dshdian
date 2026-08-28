@@ -4,12 +4,12 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { ChildProcess } from "child_process";
 
-/** DSH profile name dedicated to dshdian */
-const PROFILE_NAME = "dshdian";
+/** DSH profile name dedicated to Dshdian */
+const PROFILE_NAME = "Dshdian";
 
 /**
  * Manages the DSH Harness process lifecycle.
- * Uses a dedicated 'dshdian' profile (port 3180) to avoid conflicts
+ * Uses a dedicated 'Dshdian' profile (port 3180) to avoid conflicts
  * with the user's default web profile (port 3080).
  */
 export class DshProcessManager extends Events {
@@ -55,7 +55,7 @@ export class DshProcessManager extends Events {
 	}
 
 	/**
-	 * Ensure the dshdian profile exists with the correct bundle list.
+	 * Ensure the Dshdian profile exists with the correct bundle list.
 	 * DSH resolves bundles from its own installAnchor first, so we only need
 	 * the profile directory structure + package.json with the right bundles.
 	 * No `dsh plugin` call or pnpm install needed.
@@ -122,7 +122,7 @@ export class DshProcessManager extends Events {
 					writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), "utf-8");
 				}
 			} catch (e) {
-				console.warn("dshdian: failed to update profile package.json", e);
+				console.warn("Dshdian: failed to update profile package.json", e);
 			}
 		}
 	}
@@ -150,7 +150,7 @@ export class DshProcessManager extends Events {
 		// Ensure profile exists
 		this.ensureProfile();
 
-		// Start DSH with dshdian profile
+		// Start DSH with Dshdian profile
 		try {
 			this.process = spawn(
 				dshBin,
@@ -164,7 +164,7 @@ export class DshProcessManager extends Events {
 			this.process.unref();
 
 			this.process.on("error", (err) => {
-				console.warn("dshdian: spawn failed:", err.message);
+				console.warn("Dshdian: spawn failed:", err.message);
 				this.process = null;
 				this.trigger("error", "Failed to start DSH: " + err.message);
 				this.scheduleReconnect();

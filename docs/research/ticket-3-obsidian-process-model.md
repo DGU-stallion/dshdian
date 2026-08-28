@@ -2,7 +2,7 @@
 
 > 研究日期: 2026-08-26
 > 状态: 完成
-> 关联: Ticket #3 — dshdian 进程模型设计
+> 关联: Ticket #3 — Dshdian 进程模型设计
 
 ---
 
@@ -168,7 +168,7 @@ class MyPlugin extends Plugin {
 - Local REST API plugin: 在 Obsidian 内启动 HTTP server 接收外部请求
 - Peerdraft: WebSocket 实时接收远程协作事件
 
-**对 dshdian 的建议:**
+**对 Dshdian 的建议:**
 - Harness 进程通过 stdio pipe 推送通知是最简单可靠的方式
 - 备选: WebSocket server 在 Harness 端，插件作为 client 连接并接收推送
 
@@ -251,11 +251,11 @@ if (Platform.isDesktopApp) {
 
 ---
 
-## 7. 对 dshdian 项目的影响和建议
+## 7. 对 Dshdian 项目的影响和建议
 
 ### 架构可行性确认
 
-dshdian 项目计划中的以下能力在 Obsidian 桌面插件中**完全可行**:
+Dshdian 项目计划中的以下能力在 Obsidian 桌面插件中**完全可行**:
 
 | 能力需求 | 可行性 | 实现方式 |
 |----------|--------|----------|

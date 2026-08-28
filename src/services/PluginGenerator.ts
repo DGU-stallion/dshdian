@@ -78,7 +78,7 @@ export class PluginGenerator {
 			});
 			return true;
 		} catch (e) {
-			console.error("dshdian: plugin compilation failed —", e);
+			console.error("Dshdian: plugin compilation failed —", e);
 			throw new Error(
 				"esbuild is required for Creator mode plugin compilation. " +
 				"Ensure esbuild is available: " + String(e)
@@ -151,7 +151,7 @@ export class PluginGenerator {
 				}
 			});
 		} catch (e) {
-			console.warn("dshdian: failed to watch generated dir", e);
+			console.warn("Dshdian: failed to watch generated dir", e);
 		}
 	}
 
@@ -170,7 +170,7 @@ export class PluginGenerator {
 		try {
 			await (this.app as any).plugins.enablePluginAndSave(id);
 		} catch (e) {
-			console.warn("dshdian: hot-reload failed for", id, e);
+			console.warn("Dshdian: hot-reload failed for", id, e);
 		}
 	}
 

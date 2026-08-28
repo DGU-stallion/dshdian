@@ -6,7 +6,7 @@ import type { ChatMessage, ToolCallInfo } from "../types";
 export const VIEW_TYPE_CHAT = "dshdian-chat-view";
 
 /**
- * Main chat panel view for dshdian.
+ * Main chat panel view for Dshdian.
  * DSH Web UI-inspired layout: message area with header actions,
  * composer card with context pills, textarea, and toolbar.
  */
@@ -53,11 +53,11 @@ export class ChatPanelView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "dshdian";
+		return "Dshdian";
 	}
 
 	getIcon(): string {
-		return "bot";
+		return "dshdian-whale";
 	}
 
 	/** Register external handlers */

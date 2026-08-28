@@ -6,11 +6,11 @@
 
 ## Context
 
-参考项目 Harness Like 采用进程内 Cordis 运行时，将 AI runtime 嵌入插件进程。我们需要决定 dshdian 的 AI runtime 部署方式：是像 Harness Like 一样在进程内运行 Cordis，还是依赖外部进程。
+参考项目 Harness Like 采用进程内 Cordis 运行时，将 AI runtime 嵌入插件进程。我们需要决定 Dshdian 的 AI runtime 部署方式：是像 Harness Like 一样在进程内运行 Cordis，还是依赖外部进程。
 
 ## Decision
 
-选择外部 DSH Harness 进程（端口 3180），dshdian 作为 thin client 通过 HTTP API + SSE 与之通信。
+选择外部 DSH Harness 进程（端口 3180），Dshdian 作为 thin client 通过 HTTP API + SSE 与之通信。
 
 ## Consequences
 

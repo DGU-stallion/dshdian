@@ -404,7 +404,7 @@ export class HarnessClient {
 
 			this.emitState("reconnecting");
 			this.attempt++;
-			console.warn(`[dshdian] connection lost, retry #${this.attempt}`);
+			console.warn(`[Dshdian] connection lost, retry #${this.attempt}`);
 			await this.backoffSleep(this.attempt);
 		}
 	}
@@ -445,7 +445,7 @@ export class HarnessClient {
 
 			socket.on("error", (err: Error) => {
 				signal.removeEventListener("abort", onAbort);
-				console.error(`[dshdian] ${kind} WebSocket error:`, err.message);
+				console.error(`[Dshdian] ${kind} WebSocket error:`, err.message);
 				resolve(false);
 			});
 		});
@@ -470,7 +470,7 @@ export class HarnessClient {
 					this.callSink(() => this.sinks.onHostFrame?.(payload as HostFrame));
 				}
 			} catch (err) {
-				console.error(`[dshdian] dropping malformed ${kind} frame:`, err);
+				console.error(`[Dshdian] dropping malformed ${kind} frame:`, err);
 			}
 		});
 	}
@@ -523,7 +523,7 @@ export class HarnessClient {
 		try {
 			fn();
 		} catch (error) {
-			console.error("[dshdian] connection sink threw:", error);
+			console.error("[Dshdian] connection sink threw:", error);
 		}
 	}
 

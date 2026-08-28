@@ -6,7 +6,7 @@
 
 ## Context
 
-原方案计划在 dshdian 内嵌 MCP Server，暴露 Vault 工具给 Harness。但 Obsidian 官方 CLI 已提供完整的 vault 操作能力（创建/编辑笔记、搜索、管理附件等），内嵌 MCP Server 会引入额外的 schema 维护负担。
+原方案计划在 Dshdian 内嵌 MCP Server，暴露 Vault 工具给 Harness。但 Obsidian 官方 CLI 已提供完整的 vault 操作能力（创建/编辑笔记、搜索、管理附件等），内嵌 MCP Server 会引入额外的 schema 维护负担。
 
 ## Decision
 

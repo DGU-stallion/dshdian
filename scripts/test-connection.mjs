@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Feedback loop script for diagnosing the dshdian connection issue.
+ * Feedback loop script for diagnosing the Dshdian connection issue.
  * Simulates the exact connection sequence the plugin performs:
  * 1. Health check via HTTP (like DshProcessManager)
  * 2. Open mux WebSocket (like HarnessClient.openStream)
@@ -63,7 +63,7 @@ function openWs(path, label) {
 }
 
 async function main() {
-  console.log('=== dshdian connection diagnostic ===\n');
+  console.log('=== Dshdian connection diagnostic ===\n');
 
   // Step 1: Health check
   process.stdout.write('1. Health check (HTTP GET /)... ');

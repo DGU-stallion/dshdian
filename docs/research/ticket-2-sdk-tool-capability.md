@@ -1,4 +1,4 @@
-> ⚠️ 本研究的 MCP Server 结论已被 ADR-0002 废弃。dshdian 不再内嵌 MCP Server，改为通过 Obsidian CLI 操作 vault。本文档保留作为技术调研记录。
+> ⚠️ 本研究的 MCP Server 结论已被 ADR-0002 废弃。Dshdian 不再内嵌 MCP Server，改为通过 Obsidian CLI 操作 vault。本文档保留作为技术调研记录。
 
 # Ticket-2: DeepSeek Harness SDK/协议外部工具注册能力研究
 
@@ -9,7 +9,7 @@
 
 ## 摘要
 
-本报告调研 DeepSeek Harness 是否支持外部进程（如 Obsidian 插件）在运行时动态注册工具并参与 Agent 循环。结论：**SDK Client 模式不直接支持外部工具注册，但 MCP Server 机制（`@deepseek-ai/dsh-mcp-client`）完整支持所有五项能力。对 dshdian 项目而言，实现一个 MCP Server 是最可行路径。**
+本报告调研 DeepSeek Harness 是否支持外部进程（如 Obsidian 插件）在运行时动态注册工具并参与 Agent 循环。结论：**SDK Client 模式不直接支持外部工具注册，但 MCP Server 机制（`@deepseek-ai/dsh-mcp-client`）完整支持所有五项能力。对 Dshdian 项目而言，实现一个 MCP Server 是最可行路径。**
 
 ---
 
@@ -152,7 +152,7 @@ interface ReconnectConfig {
 
 ---
 
-## 二、对 dshdian 项目的影响和建议
+## 二、对 Dshdian 项目的影响和建议
 
 ### 2.1 推荐架构：Obsidian 插件 = MCP Server
 
@@ -187,7 +187,7 @@ interface ReconnectConfig {
 
 **推荐：MCP Server (streamable-http)**。理由：
 1. Obsidian 是 Electron 应用，主进程稳定性至关重要
-2. dshdian 的前置研究已确认参考项目选择了进程内 Cordis，我们可以走差异化路线
+2. Dshdian 的前置研究已确认参考项目选择了进程内 Cordis，我们可以走差异化路线
 3. MCP 是行业标准协议，未来可复用给其他 Agent（Cursor、Claude Code 等）
 4. 断线重连已内置，不需要自己实现
 
@@ -261,7 +261,7 @@ insert:
 
 ### 2.5 动态工具注册的关键：`notifications/tools/list_changed`
 
-当 dshdian 的子插件通过自然语言创建并注册了新工具时：
+当 Dshdian 的子插件通过自然语言创建并注册了新工具时：
 
 1. 子插件调用 `ctx.toolsCompat.register(...)` 注册到 Obsidian 插件内部
 2. Obsidian 的 MCP Server 收到注册事件
@@ -282,7 +282,7 @@ insert:
 
 这三条路径对应不同的设计哲学：
 
-| 路径 | 哲学 | dshdian 适用性 |
+| 路径 | 哲学 | Dshdian 适用性 |
 |------|------|---------------|
 | 进程内 Cordis | Obsidian 为主，AI 为附 | ✅ 适合 AI 聊天面板场景 |
 | SDK Client | AI 为主，Obsidian 为数据源 | 🟡 用户需要同时开 Harness Web UI |
@@ -305,7 +305,7 @@ insert:
 | 4 | 断线重连恢复工具 | ✅ 支持 | `ReconnectConfig` + 自动 `tools/list` 重发现 |
 | 5 | 替代机制 | ✅ 存在 | MCP Server 是官方首选；另有 Cordis 插件、A2A、ACP |
 
-**核心结论：DeepSeek Harness 通过 MCP 协议完整支持外部工具注册的所有需求场景。dshdian 项目应实现一个 MCP Server 嵌入 Obsidian 插件，通过 `streamable-http` 传输暴露 Vault 工具给 Harness。**
+**核心结论：DeepSeek Harness 通过 MCP 协议完整支持外部工具注册的所有需求场景。Dshdian 项目应实现一个 MCP Server 嵌入 Obsidian 插件，通过 `streamable-http` 传输暴露 Vault 工具给 Harness。**
 
 ---
 
