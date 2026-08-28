@@ -466,7 +466,12 @@ export class HarnessClient {
 				const payload = envelope.payload;
 
 				if (kind === "mux") {
-					this.callSink(() => this.sinks.onMuxFrame?.(payload as MuxFrame));
+					const muxPayload = payload as MuxFrame;
+					// Attach rpcId for frames that need responses (approval, question)
+					if ('sessionId' in muxPayload) {
+						(muxPayload as any).__rpcId = envelope.rpcId;
+					}
+					this.callSink(() => this.sinks.onMuxFrame?.(muxPayload));
 				} else {
 					this.callSink(() => this.sinks.onHostFrame?.(payload as HostFrame));
 				}

@@ -56,6 +56,8 @@ export default class DshdianPlugin extends Plugin {
 				onNewChat: () => this.handleNewChat(),
 				onShowHistory: () => this.handleShowHistory(),
 				onAddContext: () => this.handleAddContext(),
+				onSaveAsNote: (content) => this.handleSaveAsNote(content),
+				onRetryMessage: () => this.handleRetryMessage(),
 			});
 			view.setMode(this.settings.defaultMode);
 			view.setModel(this.settings.defaultModel);
@@ -217,7 +219,7 @@ export default class DshdianPlugin extends Plugin {
 						break;
 					case "reasoning-delta":
 						if (chunk.text) {
-							view.appendStreamToken(chunk.text);
+							view.appendReasoningToken(chunk.text);
 						}
 						break;
 					case "tool-call-delta":
@@ -235,7 +237,8 @@ export default class DshdianPlugin extends Plugin {
 
 			case "tool/call": {
 				const name = (data.name as string) ?? "unknown";
-				view.addToolCall({ name, status: "running" });
+				const args = data.arguments as string | undefined;
+				view.addToolCallCard(name, args);
 				break;
 			}
 
@@ -243,8 +246,8 @@ export default class DshdianPlugin extends Plugin {
 				const message = data.message as { content?: Array<{ text?: string }> } | undefined;
 				const resultText = message?.content?.[0]?.text ?? "";
 				const summary = resultText.length > 100 ? resultText.slice(0, 100) + "..." : resultText;
-				const callId = (data.callId as string) ?? "tool";
-				view.updateToolCall(callId, { name: callId, status: "completed", result: summary });
+				const toolName = (data.name as string) ?? (data.callId as string) ?? "tool";
+				view.updateToolCallCard(toolName, "completed", summary);
 				break;
 			}
 
@@ -357,14 +360,43 @@ export default class DshdianPlugin extends Plugin {
 		frame: QuestionRequestedFrame,
 		view: ChatPanelView
 	): Promise<void> {
-		// For MVP: show the first question as a system message
-		// Full implementation would show interactive question UI
-		const q = frame.questions[0];
-		if (!q) return;
+		const rpcId = (frame as any).__rpcId as string | undefined;
+		if (!rpcId) {
+			// Cannot respond without rpcId — fallback to system message
+			const q = frame.questions[0];
+			if (q) {
+				view.addMessage(HarnessClient.buildMessage("system", `🤔 ${q.question}`));
+			}
+			return;
+		}
 
-		const text = q.header ? `${q.header}\n${q.question}` : q.question;
-		view.addMessage(HarnessClient.buildMessage("system", `🤔 ${text}`));
-		// TODO: implement interactive question answering UI
+		// Process each question sequentially
+		const answers: Array<{ id: string; answer: string[] }> = [];
+		for (const q of frame.questions) {
+			const result = await view.showQuestionCard(
+				q.question,
+				q.header,
+				q.detail,
+				q.options,
+				q.multiSelect ?? false
+			);
+			if (result === null) {
+				// User cancelled
+				await this.client.respond(rpcId, {
+					type: "question",
+					outcome: "cancelled",
+				});
+				return;
+			}
+			answers.push({ id: q.id, answer: result });
+		}
+
+		// Send answers back
+		await this.client.respond(rpcId, {
+			type: "question",
+			outcome: "answered",
+			answers,
+		});
 	}
 
 	// ─── Message send ──────────────────────────────────────────────────
@@ -588,6 +620,33 @@ export default class DshdianPlugin extends Plugin {
 				HarnessClient.buildMessage("system", "Use @ in the text field to add file context.")
 			);
 		}
+	}
+
+	private async handleSaveAsNote(content: string): Promise<void> {
+		const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+		const path = `Dshdian Notes/${timestamp}.md`;
+		try {
+			const folder = this.app.vault.getAbstractFileByPath("Dshdian Notes");
+			if (!folder) {
+				await this.app.vault.createFolder("Dshdian Notes");
+			}
+			await this.app.vault.create(path, content);
+			new Notice(`Saved to ${path}`);
+		} catch (e) {
+			new Notice("Failed to save note");
+			console.warn("Dshdian: save as note failed", e);
+		}
+	}
+
+	private handleRetryMessage(): void {
+		// Cancel current and resend last user message
+		const view = this.getChatView();
+		if (!view) return;
+		const sid = this.modeManager.getSessionId();
+		if (sid) {
+			this.client.cancelSession(sid).catch(() => {});
+		}
+		view.addMessage(HarnessClient.buildMessage("system", "Retrying..."));
 	}
 
 	private getAvailableCommands(): string[] {
