@@ -542,6 +542,24 @@ export class ChatPanelView extends ItemView {
 		this.scrollToBottom();
 	}
 
+	/** Show a mode switch suggestion banner */
+	showModeSuggestion(message: string, mode: Mode, onSwitch: () => void): void {
+		if (!this.messageListEl) return;
+		const el = this.messageListEl.createDiv({ cls: "dshdian-mode-suggestion" });
+		el.createEl("span", { cls: "dshdian-mode-suggestion-text", text: message });
+		const btn = el.createEl("button", {
+			cls: "dshdian-mode-suggestion-btn",
+			text: `切换到${ChatPanelView.MODE_DISPLAY_NAMES[mode]}模式`,
+		});
+		btn.addEventListener("click", () => {
+			el.remove();
+			onSwitch();
+		});
+		// Auto-dismiss after 10 seconds
+		setTimeout(() => { if (el.parentElement) el.remove(); }, 10000);
+		this.scrollToBottom();
+	}
+
 	/** Show preview state banner */
 	showPreviewState(
 		pluginName: string,
@@ -577,11 +595,22 @@ export class ChatPanelView extends ItemView {
 	/** Update context meter display */
 	updateContextMeter(used: number, max: number): void {
 		if (!this.contextMeterEl) return;
-		const usedStr = used.toLocaleString();
-		const maxStr = max.toLocaleString();
-		this.contextMeterEl.title = `Context: ${usedStr} / ${maxStr}`;
+		const usedK = used >= 1000 ? `${(used / 1000).toFixed(1)}k` : String(used);
+		const maxK = max >= 1000 ? `${(max / 1000).toFixed(0)}k` : String(max);
+		this.contextMeterEl.title = `Tokens: ${usedK} / ${maxK}`;
+		// Show usage text next to icon
+		const textEl = this.contextMeterEl.querySelector(".dshdian-meter-text");
+		if (textEl) {
+			textEl.textContent = usedK;
+		} else if (used > 0) {
+			const span = document.createElement("span");
+			span.className = "dshdian-meter-text";
+			span.textContent = usedK;
+			this.contextMeterEl.appendChild(span);
+		}
 		// Change color when near limit (>80%)
-		if (used / max > 0.8) {
+		const ratio = used / max;
+		if (ratio > 0.8) {
 			this.contextMeterEl.addClass("dshdian-context-meter-warn");
 		} else {
 			this.contextMeterEl.removeClass("dshdian-context-meter-warn");

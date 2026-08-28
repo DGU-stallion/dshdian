@@ -24,6 +24,7 @@ export interface DshdianSettings {
 	autoApproveReads: boolean;
 	alwaysConfirm: boolean;
 	dangerKeywords: string;
+	protectedFolders: string;
 }
 
 export const DEFAULT_SETTINGS: DshdianSettings = {
@@ -43,6 +44,7 @@ export const DEFAULT_SETTINGS: DshdianSettings = {
 	autoApproveReads: true,
 	alwaysConfirm: false,
 	dangerKeywords: "delete,remove,删除",
+	protectedFolders: "",
 };
 
 export class DshdianSettingTab extends PluginSettingTab {
@@ -282,6 +284,19 @@ export class DshdianSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.dangerKeywords)
 					.onChange(async (value) => {
 						this.plugin.settings.dangerKeywords = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("受保护文件夹")
+			.setDesc("这些文件夹中的写操作始终需要确认，逗号分隔")
+			.addText((text) =>
+				text
+					.setPlaceholder("templates, daily-notes")
+					.setValue(this.plugin.settings.protectedFolders)
+					.onChange(async (value) => {
+						this.plugin.settings.protectedFolders = value;
 						await this.plugin.saveSettings();
 					})
 			);

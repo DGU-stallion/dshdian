@@ -6,6 +6,8 @@ import { ModeManager } from "./services/ModeManager";
 import { ReferenceResolver } from "./services/ReferenceResolver";
 import { ApprovalStrategy } from "./services/ApprovalStrategy";
 import { PluginGenerator } from "./services/PluginGenerator";
+import { IntentDetector } from "./services/IntentDetector";
+import { VaultIndexer } from "./services/VaultIndexer";
 import { DshdianSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { Mode } from "./types";
 import type { DshdianSettings } from "./settings";
@@ -26,6 +28,8 @@ export default class DshdianPlugin extends Plugin {
 	referenceResolver!: ReferenceResolver;
 	approvalStrategy!: ApprovalStrategy;
 	pluginGenerator!: PluginGenerator;
+	intentDetector!: IntentDetector;
+	vaultIndexer!: VaultIndexer;
 
 	/** Track whether a streaming assistant response is in progress */
 	private isStreaming = false;
@@ -41,8 +45,15 @@ export default class DshdianPlugin extends Plugin {
 		this.processManager = new DshProcessManager(this.settings.harnessPort);
 		this.modeManager = new ModeManager(this.client);
 		this.referenceResolver = new ReferenceResolver(this.app);
-		this.approvalStrategy = new ApprovalStrategy(this.app);
+		this.approvalStrategy = new ApprovalStrategy(this.app, this.settings);
 		this.pluginGenerator = new PluginGenerator(this.app);
+		this.intentDetector = new IntentDetector();
+		this.vaultIndexer = new VaultIndexer(this.app);
+
+		// Invalidate vault index on file changes
+		this.registerEvent(this.app.vault.on("create", () => this.vaultIndexer.invalidate()));
+		this.registerEvent(this.app.vault.on("delete", () => this.vaultIndexer.invalidate()));
+		this.registerEvent(this.app.vault.on("rename", () => this.vaultIndexer.invalidate()));
 
 		// Register the chat view
 		this.registerView(VIEW_TYPE_CHAT, (leaf: WorkspaceLeaf) => {
@@ -105,6 +116,7 @@ export default class DshdianPlugin extends Plugin {
 		await this.saveData(this.settings);
 		this.client.setPort(this.settings.harnessPort);
 		this.processManager.setPort(this.settings.harnessPort);
+		this.approvalStrategy.updateSettings(this.settings);
 	}
 
 	// ─── Connection management ─────────────────────────────────────────
@@ -174,9 +186,16 @@ export default class DshdianPlugin extends Plugin {
 				break;
 			case "session/projection": {
 				const projFrame = frame as { type: string; sessionId: string; key: string; value: unknown };
-				if (projFrame.sessionId === currentSessionId && projFrame.key === "title") {
+				if (projFrame.sessionId !== currentSessionId) break;
+				if (projFrame.key === "title") {
 					const title = projFrame.value as string;
 					if (title) view.setSessionTitle(title);
+				} else if (projFrame.key === "tokenUsage") {
+					const usage = projFrame.value as { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | undefined;
+					if (usage) {
+						const total = usage.total_tokens ?? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0);
+						view.updateContextMeter(total, 128000);
+					}
 				}
 				break;
 			}
@@ -222,10 +241,17 @@ export default class DshdianPlugin extends Plugin {
 							view.appendReasoningToken(chunk.text);
 						}
 						break;
+					case "usage": {
+						const usage = chunk.usage as { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+						if (usage) {
+							const total = usage.total_tokens ?? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0);
+							view.updateContextMeter(total, 128000); // DeepSeek context window
+						}
+						break;
+					}
 					case "tool-call-delta":
 					case "block-start":
 					case "block-end":
-					case "usage":
 					case "finish":
 						break;
 				}
@@ -437,6 +463,15 @@ export default class DshdianPlugin extends Plugin {
 		// Show user message in panel
 		view.addMessage(HarnessClient.buildMessage("user", content));
 
+		// Intent detection: suggest mode switch if write intent in Chat mode
+		const suggestedMode = this.intentDetector.detect(content, this.modeManager.getCurrentMode());
+		if (suggestedMode) {
+			const msg = this.intentDetector.getSuggestionMessage(suggestedMode);
+			view.showModeSuggestion(msg, suggestedMode, () => {
+				this.handleModeChange(suggestedMode);
+			});
+		}
+
 		// Ensure session exists
 		let sid = this.modeManager.getSessionId();
 		if (!sid) {
@@ -450,10 +485,15 @@ export default class DshdianPlugin extends Plugin {
 			}
 		}
 
-		// Send message to harness
-		const fullContent = context
-			? `[Context]\n${context}\n\n[User Message]\n${content}`
-			: content;
+		// Inject vault structure index
+		const vaultIndex = this.vaultIndexer.getIndex();
+		const contextParts: string[] = [];
+		contextParts.push(`[Vault Info]\n${vaultIndex}`);
+		if (context) {
+			contextParts.push(`[Referenced Files]\n${context}`);
+		}
+		contextParts.push(`[User Message]\n${content}`);
+		const fullContent = contextParts.join("\n\n");
 		try {
 			await this.client.sendMessage(sid, fullContent);
 		} catch (e) {

@@ -849,3 +849,54 @@
 .dshdian-question-cancel-btn:hover {
 	opacity: 0.9;
 }
+
+/* ====== Context Meter Text (Phase 3) ====== */
+.dshdian-meter-text {
+	font-size: 10px;
+	color: var(--text-faint);
+	margin-left: 2px;
+}
+
+.dshdian-context-meter-warn .dshdian-meter-text {
+	color: var(--color-orange);
+}
+
+/* ====== Mode Suggestion (Phase 3) ====== */
+.dshdian-mode-suggestion {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	margin: 4px 0;
+	border-radius: 8px;
+	background: var(--background-secondary);
+	border: 1px solid var(--color-yellow);
+	animation: dshdian-fade-in 0.2s ease;
+}
+
+@keyframes dshdian-fade-in {
+	from { opacity: 0; transform: translateY(4px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+.dshdian-mode-suggestion-text {
+	font-size: 12px;
+	color: var(--text-normal);
+	flex: 1;
+}
+
+.dshdian-mode-suggestion-btn {
+	padding: 4px 10px;
+	border-radius: 6px;
+	border: none;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.dshdian-mode-suggestion-btn:hover {
+	opacity: 0.9;
+}
