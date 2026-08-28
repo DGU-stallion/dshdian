@@ -5,7 +5,10 @@
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "node esbuild.config.mjs production"
+    "build": "node esbuild.config.mjs production",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "obsidian",
@@ -21,7 +24,8 @@
     "@types/ws": "^8.18.1",
     "esbuild": "0.25.0",
     "obsidian": "1.7.2",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "ws": "^8.21.3"
