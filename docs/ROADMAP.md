@@ -42,56 +42,56 @@
 
 ---
 
-### 🎯 Phase 2: 交互完善
+### ✅ Phase 2: 交互完善（已完成 2026-08-28）
 
 目标：补齐 agent 交互闭环——用户能看到 AI 在做什么、能确认/拒绝操作。
 
 | # | 功能 | 来源 | 说明 | 状态 |
 |---|------|------|------|------|
-| 6 | Approval UI — 确认 Modal | Claudian 借鉴 + ROADMAP 原 M2 | 响应 approval/requested 帧，弹 Modal 让用户 Allow/Reject | 🔲 |
-| 7 | Question 交互 UI | ROADMAP 原 M2 | 响应 question/requested 帧，渲染选项卡让用户作答 | 🔲 |
-| 8 | Thinking/Tool-call 可视化 | Claudian 借鉴 | 利用 reasoning-delta + tool-call-delta 渲染折叠式思考链和工具调用卡片 | 🔲 |
-| 9 | 消息操作按钮 | Claudian 借鉴 | 每条 assistant 消息：Copy / Save as Note / Retry | 🔲 |
-| 10 | 代码块复制按钮 | ROADMAP 原 M3 提前 | ``` 代码块右上角加复制 icon | 🔲 |
+| 6 | Approval UI — 确认 Modal | Claudian 借鉴 + ROADMAP 原 M2 | 响应 approval/requested 帧，弹 Modal 让用户 Allow/Reject | ✅ |
+| 7 | Question 交互 UI | ROADMAP 原 M2 | 响应 question/requested 帧，渲染选项卡让用户作答 | ✅ |
+| 8 | Thinking/Tool-call 可视化 | Claudian 借鉴 | 利用 reasoning-delta + tool-call-delta 渲染折叠式思考链和工具调用卡片 | ✅ |
+| 9 | 消息操作按钮 | Claudian 借鉴 | 每条 assistant 消息：Copy / Save as Note / Retry | ✅ |
+| 10 | 代码块复制按钮 | ROADMAP 原 M3 提前 | ``` 代码块右上角加复制 icon | ✅ |
 
 ---
 
-### 🧠 Phase 3: 智能增强
+### ✅ Phase 3: 智能增强（已完成 2026-08-28）
 
 目标：让 Dshdian 比"透传 DSH"更聪明——自动注入上下文、主动引导用户。
 
 | # | 功能 | 来源 | 说明 | 状态 |
 |---|------|------|------|------|
-| 11 | Vault Indexer — 自动结构注入 | Claudian 借鉴 | 启动时索引 vault（路径树+标签+最近修改），作为 system prompt 片段注入 | 🔲 |
-| 12 | Intent Detection — 智能模式切换提示 | Claudian 借鉴 | Chat 模式下检测到写操作意图时，提示切换管家模式 | 🔲 |
-| 13 | Context Meter | ROADMAP 原 M3 | 利用 usage 事件在 UI 上显示 token 消耗和上下文使用率（已预留 contextMeterEl） | 🔲 |
-| 14 | ApprovalStrategy 增强 | 调研新增 | 补 overwrite 检测 + protected folders 配置 | 🔲 |
+| 11 | Vault Indexer — 自动结构注入 | Claudian 借鉴 | 启动时索引 vault（路径树+标签+最近修改），作为 system prompt 片段注入 | ✅ |
+| 12 | Intent Detection — 智能模式切换提示 | Claudian 借鉴 | Chat 模式下检测到写操作意图时，提示切换管家模式 | ✅ |
+| 13 | Context Meter | ROADMAP 原 M3 | 利用 usage 事件在 UI 上显示 token 消耗和上下文使用率（已预留 contextMeterEl） | ✅ |
+| 14 | ApprovalStrategy 增强 | 调研新增 | 补 overwrite 检测 + protected folders 配置 | ✅ |
 
 ---
 
-### 🎨 Phase 4: 体验打磨 + 生态
+### ✅ Phase 4: 体验打磨 + 生态（已完成 2026-08-28）
 
 目标：接近正式发布的用户体验质量，拓展 vault 交互能力。
 
 | # | 功能 | 来源 | 状态 |
 |---|------|------|------|
-| 15 | 文件路径可点击打开 | ROADMAP 原 M3 | 🔲 |
-| 16 | Tool call 折叠/展开优化 | ROADMAP 原 M3 | 🔲 |
-| 17 | 键盘快捷键（Cmd+L/N/Esc） | ROADMAP 原 M3 | 🔲 |
-| 18 | Smart Note Processing（/suggest 命令） | Claudian 借鉴 | 🔲 |
-| 19 | Concept Map 生成（Mermaid） | Claudian 借鉴 | 🔲 |
-| 20 | GUI Action Bridge（workspace/editor 操作） | 调研新增 | 🔲 |
-| 21 | Batch Processing（多笔记批处理） | Claudian 借鉴 | 🔲 |
-| 22 | 多 session tab | ROADMAP 原 M3 | 🔲 |
-| 23 | 主题适配微调 | ROADMAP 原 M3 | 🔲 |
+| 15 | 文件路径可点击打开 | ROADMAP 原 M3 | ✅ |
+| 16 | Tool call 折叠/展开优化 | ROADMAP 原 M3 | ✅ |
+| 17 | 键盘快捷键（Cmd+L/N/Esc） | ROADMAP 原 M3 | ✅ |
+| 18 | Smart Note Processing（/suggest 命令） | Claudian 借鉴 | ✅ |
+| 19 | Concept Map 生成（Mermaid） | Claudian 借鉴 | ✅ |
+| 20 | GUI Action Bridge（workspace/editor 操作） | 调研新增 | ✅ |
+| 21 | Batch Processing（多笔记批处理） | Claudian 借鉴 | ✅ |
+| 22 | 多 session tab | ROADMAP 原 M3 | ✅ |
+| 23 | 主题适配微调 | ROADMAP 原 M3 | ✅ |
 
 ---
 
-### 🏗️ Phase 5: 工程化
+### ✅ Phase 5: 工程化（部分完成 2026-08-28）
 
 | # | 功能 | 说明 | 状态 |
 |---|------|------|------|
-| 24 | 单元测试 | HarnessClient, ModeManager, ApprovalStrategy 可测 | 🔲 |
+| 24 | 单元测试 | IntentDetector, ModeManager, ApprovalStrategy, VaultIndexer — 49 tests | ✅ |
 | 25 | CI/CD | GitHub Actions: tsc + build + test | 🔲 |
 | 26 | 自动发布 | tag → build → GitHub Release | 🔲 |
 | 27 | 错误边界 | 未捕获异常不崩溃整个插件 | 🔲 |
@@ -101,12 +101,13 @@
 
 ## 已知 Bug
 
-| 问题 | 严重度 | 根因 | 修复方向 | 归属 |
-|------|--------|------|----------|------|
-| 模式切换不实际生效 | **高** | `session.create` 未传 `agentPreset`/permission | 聊天=read-only, 管家=workspace-write, 创造=cordis preset | Phase 1 #1 |
-| 历史记录跨实例混杂 | 中 | `session.list` 返回 profile 下所有 session | 客户端按 `cwd === vaultPath` 过滤 | Phase 1 #2 |
-| Health check 走代理 | 中 | Obsidian `requestUrl()` 使用系统代理 | 改用 Node http 模块直连 127.0.0.1 | Phase 1 #5 |
-| Approval respond 未验证 | 低 | respond 调用路径未实际触发过 | 找到触发审批的 tool call 做端到端测试 | Phase 2 #6 |
+| 问题 | 严重度 | 状态 | 修复版本 |
+|------|--------|------|----------|
+| 模式切换不实际生效 | 高 | ✅ 已修复 | v0.1.0 (Phase 1) |
+| 历史记录跨实例混杂 | 中 | ✅ 已修复 | v0.1.0 (Phase 1) |
+| Health check 走代理 | 中 | ✅ 已修复 | v0.1.0 (Phase 1) |
+| Approval respond 未验证 | 低 | ✅ 已修复 | v0.2.0 (Phase 2) |
+| IntentDetector 中文正则不匹配 | 中 | ✅ 已修复 | v0.2.0 (Phase 5 测试发现) |
 
 ---
 
