@@ -280,10 +280,11 @@ export class HarnessClient {
 
 	// ─── Session API ─────────────────────────────────────────────────────
 
-	async createSession(cwd?: string, agentPreset?: string): Promise<string> {
+	async createSession(cwd?: string, agentPreset?: string, permission?: string): Promise<string> {
 		const payload: Record<string, unknown> = {};
 		if (cwd) payload.cwd = cwd;
 		if (agentPreset) payload.agentPreset = agentPreset;
+		if (permission) payload.permission = permission;
 
 		const result = await this.rpc<{ sessionId: string }>(
 			"session.create",
