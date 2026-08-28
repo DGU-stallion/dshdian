@@ -56,6 +56,7 @@ export class ChatPanelView extends ItemView {
 	private onAddContext: (() => void) | null = null;
 	private onSaveAsNote: ((content: string) => void) | null = null;
 	private onRetryMessage: (() => void) | null = null;
+	private onOpenFile: ((path: string) => void) | null = null;
 
 	getViewType(): string {
 		return VIEW_TYPE_CHAT;
@@ -81,6 +82,7 @@ export class ChatPanelView extends ItemView {
 		onAddContext: () => void;
 		onSaveAsNote: (content: string) => void;
 		onRetryMessage: () => void;
+		onOpenFile: (path: string) => void;
 	}): void {
 		this.onSendMessage = handlers.onSendMessage;
 		this.onModeChange = handlers.onModeChange;
@@ -92,6 +94,7 @@ export class ChatPanelView extends ItemView {
 		this.onAddContext = handlers.onAddContext;
 		this.onSaveAsNote = handlers.onSaveAsNote;
 		this.onRetryMessage = handlers.onRetryMessage;
+		this.onOpenFile = handlers.onOpenFile;
 	}
 
 	async onOpen(): Promise<void> {
@@ -368,7 +371,8 @@ export class ChatPanelView extends ItemView {
 
 		if (args) {
 			const argsEl = el.createDiv({ cls: "dshdian-tool-card-args" });
-			argsEl.textContent = args.length > 200 ? args.slice(0, 200) + "..." : args;
+			const displayArgs = args.length > 200 ? args.slice(0, 200) + "..." : args;
+			this.linkifyPaths(argsEl, displayArgs);
 		}
 
 		// Click to toggle expand
@@ -396,7 +400,8 @@ export class ChatPanelView extends ItemView {
 					if (!resultEl) {
 						resultEl = card.createDiv({ cls: "dshdian-tool-card-result" });
 					}
-					resultEl.textContent = result;
+					resultEl.empty();
+					this.linkifyPaths(resultEl, result);
 				}
 				break;
 			}
@@ -591,6 +596,42 @@ export class ChatPanelView extends ItemView {
 	}
 
 	// ─── Private helpers ───────────────────────────────────────────────
+
+	/** Make file paths in text clickable */
+	private linkifyPaths(container: HTMLElement, text: string): void {
+		// Match common vault file paths (anything ending in .md, .ts, .js, .json, .css, .yml, .yaml, or paths with /)
+		const pathRegex = /(?:[\w\-./]+\/[\w\-./]+|[\w\-]+\.(?:md|ts|js|json|css|yml|yaml|txt))/g;
+		let lastIndex = 0;
+		let match: RegExpExecArray | null;
+		while ((match = pathRegex.exec(text)) !== null) {
+			// Add text before the match
+			if (match.index > lastIndex) {
+				container.appendText(text.slice(lastIndex, match.index));
+			}
+			// Add clickable link
+			const link = container.createEl("a", {
+				cls: "dshdian-file-link",
+				text: match[0],
+				attr: { "data-path": match[0] },
+			});
+			link.addEventListener("click", (e) => {
+				e.preventDefault();
+				if (this.onOpenFile) this.onOpenFile(match![0]);
+			});
+			lastIndex = match.index + match[0].length;
+		}
+		// Remaining text
+		if (lastIndex < text.length) {
+			container.appendText(text.slice(lastIndex));
+		}
+	}
+
+	/** Focus the text input */
+	focusInput(): void {
+		if (this.inputEl) {
+			this.inputEl.focus();
+		}
+	}
 
 	/** Update context meter display */
 	updateContextMeter(used: number, max: number): void {

@@ -900,3 +900,101 @@
 .dshdian-mode-suggestion-btn:hover {
 	opacity: 0.9;
 }
+
+/* ====== Theme Adaptation (Phase 4) ====== */
+
+/* Ensure proper contrast in light theme */
+.theme-light .dshdian-message-user {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.theme-light .dshdian-tool-card {
+	background: var(--background-secondary);
+	border-color: var(--background-modifier-border);
+}
+
+.theme-light .dshdian-reasoning {
+	background: var(--background-secondary-alt, var(--background-secondary));
+}
+
+.theme-light .dshdian-approval-request {
+	background: var(--background-secondary);
+}
+
+.theme-light .dshdian-question-card {
+	background: var(--background-secondary);
+}
+
+/* Dark theme specific */
+.theme-dark .dshdian-composer {
+	border-color: var(--background-modifier-border);
+	background: var(--background-primary);
+}
+
+.theme-dark .dshdian-history-panel {
+	background: var(--background-primary);
+	border-color: var(--background-modifier-border);
+}
+
+/* Scrollbar styling for chat */
+.dshdian-message-list::-webkit-scrollbar {
+	width: 6px;
+}
+
+.dshdian-message-list::-webkit-scrollbar-thumb {
+	background: var(--background-modifier-border);
+	border-radius: 3px;
+}
+
+.dshdian-message-list::-webkit-scrollbar-thumb:hover {
+	background: var(--text-faint);
+}
+
+/* Smooth transitions */
+.dshdian-message {
+	animation: dshdian-msg-in 0.2s ease;
+}
+
+@keyframes dshdian-msg-in {
+	from { opacity: 0; transform: translateY(8px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+/* Focus states for accessibility */
+.dshdian-input:focus {
+	outline: none;
+	box-shadow: none;
+}
+
+.dshdian-composer:focus-within {
+	border-color: var(--interactive-accent);
+}
+
+/* Tool card animation */
+.dshdian-tool-card {
+	transition: border-color 0.2s, background 0.2s;
+}
+
+/* Responsive: narrow panels */
+@media (max-width: 350px) {
+	.dshdian-message-user {
+		max-width: 95%;
+	}
+	.dshdian-toolbar {
+		flex-wrap: wrap;
+	}
+}
+
+/* ====== File path links (Phase 4) ====== */
+.dshdian-file-link {
+	color: var(--link-color);
+	cursor: pointer;
+	text-decoration: underline;
+	text-decoration-style: dotted;
+}
+
+.dshdian-file-link:hover {
+	text-decoration-style: solid;
+	opacity: 0.8;
+}
