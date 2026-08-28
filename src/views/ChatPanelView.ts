@@ -15,6 +15,7 @@ export class ChatPanelView extends ItemView {
 	private inputEl: HTMLTextAreaElement | null = null;
 	private suggestionsEl: HTMLElement | null = null;
 	private statusEl: HTMLElement | null = null;
+	private sessionTitleEl: HTMLElement | null = null;
 	private pillContainerEl: HTMLElement | null = null;
 	private composerEl: HTMLElement | null = null;
 	private modeBtn: HTMLElement | null = null;
@@ -25,6 +26,7 @@ export class ChatPanelView extends ItemView {
 	private streamingMsgEl: HTMLElement | null = null;
 	private streamingContentEl: HTMLElement | null = null;
 	private streamingText = "";
+	private streamRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
 	/** Selected file references shown as pills */
 	private selectedRefs: string[] = [];
@@ -89,6 +91,10 @@ export class ChatPanelView extends ItemView {
 		// Header actions: status + [New] [History]
 		const headerEl = container.createDiv({ cls: "dshdian-header-actions" });
 		this.statusEl = headerEl.createEl("span", { cls: "dshdian-status" });
+
+		// Add session title element
+		const titleEl = headerEl.createEl("span", { cls: "dshdian-session-title" });
+		this.sessionTitleEl = titleEl;
 
 		const spacer = headerEl.createEl("span");
 		spacer.style.flex = "1";
@@ -195,10 +201,15 @@ export class ChatPanelView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		if (this.streamRenderTimer !== null) {
+			clearTimeout(this.streamRenderTimer);
+			this.streamRenderTimer = null;
+		}
 		this.messageListEl = null;
 		this.inputEl = null;
 		this.suggestionsEl = null;
 		this.statusEl = null;
+		this.sessionTitleEl = null;
 		this.pillContainerEl = null;
 		this.composerEl = null;
 		this.modeBtn = null;
@@ -235,6 +246,13 @@ export class ChatPanelView extends ItemView {
 		this.statusEl.className = `dshdian-status dshdian-status-${status}`;
 	}
 
+	/** Update the session title displayed in the header */
+	setSessionTitle(title: string): void {
+		if (this.sessionTitleEl) {
+			this.sessionTitleEl.textContent = title;
+		}
+	}
+
 	/** Add a completed message to the chat display */
 	addMessage(msg: ChatMessage): void {
 		if (!this.messageListEl) return;
@@ -267,12 +285,26 @@ export class ChatPanelView extends ItemView {
 	appendStreamToken(token: string): void {
 		if (!this.streamingContentEl) return;
 		this.streamingText += token;
+		// Show plain text immediately for responsiveness
 		this.streamingContentEl.textContent = this.streamingText;
+		// Debounced markdown render
+		if (this.streamRenderTimer === null) {
+			this.streamRenderTimer = setTimeout(() => {
+				this.streamRenderTimer = null;
+				if (this.streamingContentEl && this.streamingText) {
+					renderMarkdown(this.streamingContentEl, this.streamingText, "", this);
+				}
+			}, 100);
+		}
 		this.scrollToBottom();
 	}
 
 	/** Finalize the streaming message — render as markdown */
 	finalizeStreamingMessage(): void {
+		if (this.streamRenderTimer !== null) {
+			clearTimeout(this.streamRenderTimer);
+			this.streamRenderTimer = null;
+		}
 		if (this.streamingMsgEl && this.streamingContentEl) {
 			this.streamingMsgEl.removeClass("dshdian-message-streaming");
 			const text = this.streamingText;

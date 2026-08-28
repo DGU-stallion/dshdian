@@ -170,9 +170,15 @@ export default class DshdianPlugin extends Plugin {
 					HarnessClient.buildMessage("system", `Stream error: ${frame.error.message}`)
 				);
 				break;
+			case "session/projection": {
+				const projFrame = frame as { type: string; sessionId: string; key: string; value: unknown };
+				if (projFrame.sessionId === currentSessionId && projFrame.key === "title") {
+					const title = projFrame.value as string;
+					if (title) view.setSessionTitle(title);
+				}
+				break;
+			}
 			default:
-				// session/queue, session/jobs, session/projection, approval/resolved, question/resolved
-				// — not needed for MVP
 				break;
 		}
 	}
@@ -468,6 +474,7 @@ export default class DshdianPlugin extends Plugin {
 		const view = this.getChatView();
 		if (view) {
 			view.clearMessages();
+			view.setSessionTitle("");
 			view.updateContextMeter(0, this.settings.maxContextLength);
 		}
 		this.isStreaming = false;
@@ -486,10 +493,11 @@ export default class DshdianPlugin extends Plugin {
 		try {
 			const sessions = await this.client.listSessions();
 			const currentSid = this.modeManager.getSessionId();
+			const vaultPath = this.getVaultPath();
 
-			// Filter out blank sessions and format for display
+			// Filter out blank sessions and non-vault sessions, then format
 			const items = sessions
-				.filter(s => !s.blank)
+				.filter(s => !s.blank && s.cwd === vaultPath)
 				.sort((a, b) => b.updatedAt - a.updatedAt)
 				.map(s => ({
 					sessionId: s.sessionId,
@@ -513,6 +521,7 @@ export default class DshdianPlugin extends Plugin {
 		if (!view) return;
 
 		view.clearMessages();
+		view.setSessionTitle("");
 		view.setInputEnabled(false);
 
 		// Update ModeManager's session reference
