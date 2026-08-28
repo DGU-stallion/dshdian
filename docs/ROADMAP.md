@@ -101,13 +101,11 @@
 
 ## 已知 Bug
 
-| 问题 | 严重度 | 状态 | 修复版本 |
+| 问题 | 严重度 | 根因 | 修复方向 |
 |------|--------|------|----------|
-| 模式切换不实际生效 | 高 | ✅ 已修复 | v0.1.0 (Phase 1) |
-| 历史记录跨实例混杂 | 中 | ✅ 已修复 | v0.1.0 (Phase 1) |
-| Health check 走代理 | 中 | ✅ 已修复 | v0.1.0 (Phase 1) |
-| Approval respond 未验证 | 低 | ✅ 已修复 | v0.2.0 (Phase 2) |
-| IntentDetector 中文正则不匹配 | 中 | ✅ 已修复 | v0.2.0 (Phase 5 测试发现) |
+| 模式切换触发 /permission 对话 | **高** | 当前用 `sendMessage("/permission ...")` 切换权限，DSH 会把它当用户消息显示在聊天中 | 需要找到 DSH 无感切换权限的 API（可能是直接 append event 或有内部 RPC） |
+| Create 模式切换逻辑不完整 | 高 | 只处理了 Chat↔Standard，未覆盖 Create↔Chat 和 Create↔Standard 的回退 | 需要完善三模式两两切换的完整状态机 |
+| DSH 连接依赖手动启动 | 中 | Obsidian GUI 进程 PATH 不含 dsh 二进制路径 | findDsh() 已改进但需在 Obsidian 环境中实测验证 |
 
 ---
 
