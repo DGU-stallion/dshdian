@@ -203,8 +203,8 @@ export class ChatPanelView extends ItemView {
 
 		// Context meter
 		this.contextMeterEl = toolbar.createEl("span", { cls: "dshdian-context-meter" });
-		setIcon(this.contextMeterEl, "gauge");
-		this.contextMeterEl.title = "Context: 0 / 50,000";
+		this.contextMeterEl.textContent = "0";
+		this.contextMeterEl.title = "Tokens: 0 / 128k";
 
 		// Send button
 		const sendBtn = toolbar.createEl("button", { cls: "clickable-icon dshdian-send-btn" });
@@ -651,17 +651,9 @@ export class ChatPanelView extends ItemView {
 	updateContextMeter(used: number, max: number): void {
 		if (!this.contextMeterEl) return;
 		const usedK = used >= 1000 ? `${(used / 1000).toFixed(1)}k` : String(used);
-		const maxK = max >= 1000 ? `${(max / 1000).toFixed(0)}k` : String(max);
+		const maxK = max >= 1000 ? `${Math.round(max / 1000)}k` : String(max);
+		this.contextMeterEl.textContent = usedK;
 		this.contextMeterEl.title = `Tokens: ${usedK} / ${maxK}`;
-		// Show usage text next to icon
-		let textEl = this.contextMeterEl.querySelector(".dshdian-meter-text") as HTMLElement | null;
-		if (!textEl) {
-			textEl = document.createElement("span");
-			textEl.className = "dshdian-meter-text";
-			this.contextMeterEl.appendChild(textEl);
-		}
-		textEl.textContent = usedK;
-		// Change color when near limit (>80%)
 		const ratio = used / max;
 		if (ratio > 0.8) {
 			this.contextMeterEl.addClass("dshdian-context-meter-warn");
@@ -670,41 +662,21 @@ export class ChatPanelView extends ItemView {
 		}
 	}
 
-	/** Add action buttons (Copy / Save as Note / Retry) to an assistant message */
+	/** Add copy button to an assistant message */
 	private addMessageActions(msgEl: HTMLElement, content: string): void {
 		const actions = msgEl.createDiv({ cls: "dshdian-message-actions" });
 
 		// Copy button
 		const copyBtn = actions.createEl("button", {
-			cls: "dshdian-action-btn",
-			attr: { "aria-label": "Copy" },
+			cls: "dshdian-action-btn dshdian-copy-action",
+			text: "Copy",
+			attr: { "aria-label": "Copy message" },
 		});
-		setIcon(copyBtn, "copy");
 		copyBtn.addEventListener("click", () => {
 			navigator.clipboard.writeText(content).then(() => {
-				setIcon(copyBtn, "check");
-				setTimeout(() => setIcon(copyBtn, "copy"), 1500);
+				copyBtn.textContent = "Copied!";
+				setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
 			});
-		});
-
-		// Save as Note button
-		const saveBtn = actions.createEl("button", {
-			cls: "dshdian-action-btn",
-			attr: { "aria-label": "Save as Note" },
-		});
-		setIcon(saveBtn, "file-plus");
-		saveBtn.addEventListener("click", () => {
-			if (this.onSaveAsNote) this.onSaveAsNote(content);
-		});
-
-		// Retry button
-		const retryBtn = actions.createEl("button", {
-			cls: "dshdian-action-btn",
-			attr: { "aria-label": "Retry" },
-		});
-		setIcon(retryBtn, "refresh-cw");
-		retryBtn.addEventListener("click", () => {
-			if (this.onRetryMessage) this.onRetryMessage();
 		});
 	}
 

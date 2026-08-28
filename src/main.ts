@@ -11,7 +11,6 @@ import { VaultIndexer } from "./services/VaultIndexer";
 import { DshdianSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { Mode } from "./types";
 import type { DshdianSettings } from "./settings";
-import { ApprovalLevel } from "./types";
 import type { MuxFrame, HostFrame, ApprovalRequestedFrame, QuestionRequestedFrame, StreamChunk as StreamChunkType } from "./services/HarnessClient";
 
 /** DSH black whale icon — derived from DeepSeek Harness official favicon (MIT). */
@@ -33,6 +32,9 @@ export default class DshdianPlugin extends Plugin {
 
 	/** Track whether a streaming assistant response is in progress */
 	private isStreaming = false;
+
+	/** Track whether the current session has already received system instructions */
+	private sessionHasSentMessage = false;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -440,42 +442,34 @@ export default class DshdianPlugin extends Plugin {
 		view: ChatPanelView
 	): Promise<void> {
 		const toolName = frame.toolName;
-		const decision = await this.approvalStrategy.getDecision(toolName);
+		const currentMode = this.modeManager.getCurrentMode();
 
-		switch (decision.level) {
-			case ApprovalLevel.Silent:
-				// Auto-approve
-				await this.client.respond(frame.approvalId, {
-					type: "approval",
-					sessionId: frame.sessionId,
-					approvalId: frame.approvalId,
-					outcome: "allowed-once",
-				});
-				break;
-			case ApprovalLevel.Notify:
-				view.showNotification(`${decision.description}`);
-				await this.client.respond(frame.approvalId, {
-					type: "approval",
-					sessionId: frame.sessionId,
-					approvalId: frame.approvalId,
-					outcome: "allowed-once",
-				});
-				break;
-			case ApprovalLevel.Confirm: {
-				const approved = await view.showApprovalRequest(decision.action, decision.description);
-				await this.client.respond(frame.approvalId, {
-					type: "approval",
-					sessionId: frame.sessionId,
-					approvalId: frame.approvalId,
-					outcome: approved ? "allowed-once" : "rejected",
-				});
-				if (!approved) {
-					view.addMessage(
-						HarnessClient.buildMessage("system", `Rejected: ${toolName}`)
-					);
-				}
-				break;
-			}
+		// In Chat mode, always reject write tools (shouldn't happen with read-only permission)
+		if (currentMode === Mode.Chat) {
+			await this.client.respond(frame.approvalId, {
+				type: "approval",
+				sessionId: frame.sessionId,
+				approvalId: frame.approvalId,
+				outcome: "rejected",
+			});
+			view.addMessage(
+				HarnessClient.buildMessage("system", `Chat mode is read-only. Rejected: ${toolName}`)
+			);
+			return;
+		}
+
+		// In Standard/Creator mode, always show approval dialog for tool calls
+		const approved = await view.showApprovalRequest(toolName, `Tool: ${toolName}`);
+		await this.client.respond(frame.approvalId, {
+			type: "approval",
+			sessionId: frame.sessionId,
+			approvalId: frame.approvalId,
+			outcome: approved ? "allowed-once" : "rejected",
+		});
+		if (!approved) {
+			view.addMessage(
+				HarnessClient.buildMessage("system", `Rejected: ${toolName}`)
+			);
 		}
 	}
 
@@ -590,17 +584,26 @@ export default class DshdianPlugin extends Plugin {
 			}
 		}
 
-		// Inject vault structure index
-		const vaultIndex = this.vaultIndexer.getIndex();
-		const contextParts: string[] = [];
-		contextParts.push(`[Vault Info]\n${vaultIndex}`);
-		if (context) {
-			contextParts.push(`[Referenced Files]\n${context}`);
+		// Build system instructions (only sent on first message of session)
+		const isFirstMessage = !this.sessionHasSentMessage;
+		let instructions: string | undefined;
+		if (isFirstMessage) {
+			const modeConfig = this.modeManager.getConfig();
+			const settingsPrompt = this.getSettingsSystemPrompt();
+			const vaultIndex = this.vaultIndexer.getIndex();
+			instructions = [
+				settingsPrompt || modeConfig.systemPrompt,
+				`\n\n[Vault Structure]\n${vaultIndex}`,
+			].join("");
+			this.sessionHasSentMessage = true;
 		}
-		contextParts.push(`[User Message]\n${content}`);
-		const fullContent = contextParts.join("\n\n");
+
+		// Build user message content (with @ref context if any)
+		const fullContent = context
+			? `${content}\n\n[Referenced Files]\n${context}`
+			: content;
 		try {
-			await this.client.sendMessage(sid, fullContent);
+			await this.client.sendMessage(sid, fullContent, instructions);
 		} catch (e) {
 			console.warn("Dshdian: failed to send message", e);
 			view.addMessage(
@@ -632,6 +635,7 @@ export default class DshdianPlugin extends Plugin {
 			view.clearMessages();
 			view.setMode(mode);
 		}
+		this.sessionHasSentMessage = false;
 		await this.modeManager.switchMode(mode, this.getVaultPath());
 
 		if (mode === Mode.Creator) {
@@ -647,6 +651,15 @@ export default class DshdianPlugin extends Plugin {
 		this.settings.defaultModel = model;
 	}
 
+	private getSettingsSystemPrompt(): string {
+		const mode = this.modeManager.getCurrentMode();
+		switch (mode) {
+			case Mode.Chat: return this.settings.chatSystemPrompt;
+			case Mode.Butler: return this.settings.butlerSystemPrompt;
+			case Mode.Creator: return this.settings.creatorSystemPrompt;
+		}
+	}
+
 	private handleNewChat(): void {
 		const view = this.getChatView();
 		if (view) {
@@ -655,6 +668,7 @@ export default class DshdianPlugin extends Plugin {
 			view.updateContextMeter(0, this.settings.maxContextLength);
 		}
 		this.isStreaming = false;
+		this.sessionHasSentMessage = false;
 		this.modeManager.switchMode(this.modeManager.getCurrentMode(), this.getVaultPath());
 	}
 
@@ -708,15 +722,14 @@ export default class DshdianPlugin extends Plugin {
 		try {
 			const events = await this.client.getHistory(sessionId) as Array<{ event: { type: string; data?: Record<string, unknown>; [key: string]: unknown } }>;
 
-			// Replay history: extract user messages and assistant messages
+			// Replay history: process all event types
 			for (const entry of events) {
 				const ev = entry.event;
 				if (!ev) continue;
+				const data = (ev.data ?? ev) as Record<string, unknown>;
 
-				if (ev.type === "user/message" || ev.type === "agent/inbox/spliced") {
-					// Extract user text from inbox spliced events
-					const data = ev.data as Record<string, unknown> | undefined;
-					if (ev.type === "agent/inbox/spliced") {
+				switch (ev.type) {
+					case "agent/inbox/spliced": {
 						const inserted = (data?.inserted as Array<{ content?: Array<{ type: string; text?: string }> }>) ?? [];
 						for (const msg of inserted) {
 							const text = msg.content?.find(c => c.type === "text")?.text;
@@ -724,20 +737,42 @@ export default class DshdianPlugin extends Plugin {
 								view.addMessage(HarnessClient.buildMessage("user", text));
 							}
 						}
+						break;
 					}
-				} else if (ev.type === "assistant/message") {
-					// Complete assistant message
-					const data = ev.data as { message?: { content?: Array<{ type: string; text?: string }> } } | undefined;
-					const blocks = data?.message?.content ?? [];
-					const text = blocks
-						.filter(b => b.type === "text")
-						.map(b => b.text ?? "")
-						.join("");
-					if (text) {
-						view.addMessage(HarnessClient.buildMessage("assistant", text));
+					case "user/message": {
+						const text = (data?.text as string) ?? "";
+						if (text) view.addMessage(HarnessClient.buildMessage("user", text));
+						break;
 					}
+					case "assistant/message": {
+						const message = data?.message as { content?: Array<{ type: string; text?: string }> } | undefined;
+						const blocks = message?.content ?? [];
+						const text = blocks.filter(b => b.type === "text").map(b => b.text ?? "").join("");
+						if (text) {
+							view.addMessage(HarnessClient.buildMessage("assistant", text));
+						}
+						break;
+					}
+					case "tool/call": {
+						const name = (data.name as string) ?? "unknown";
+						const args = data.arguments as string | undefined;
+						view.addToolCallCard(name, args);
+						break;
+					}
+					case "tool/result": {
+						const resultMsg = data.message as { content?: Array<{ text?: string }> } | undefined;
+						const resultText = resultMsg?.content?.[0]?.text ?? "";
+						const summary = resultText.length > 100 ? resultText.slice(0, 100) + "..." : resultText;
+						const toolName = (data.name as string) ?? "tool";
+						view.updateToolCallCard(toolName, "completed", summary);
+						break;
+					}
+					default:
+						break;
 				}
 			}
+
+			this.sessionHasSentMessage = true; // Existing session already has instructions
 		} catch (e) {
 			view.addMessage(
 				HarnessClient.buildMessage("system", "加载历史记录失败")
