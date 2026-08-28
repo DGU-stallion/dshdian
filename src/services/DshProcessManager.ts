@@ -1,7 +1,8 @@
-import { Events, request } from "obsidian";
+import { Events } from "obsidian";
 import { spawn, execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import http from "http";
 import type { ChildProcess } from "child_process";
 
 /** DSH profile name dedicated to Dshdian */
@@ -225,23 +226,27 @@ export class DshProcessManager extends Events {
 		this.trigger("stopped");
 	}
 
-	/** Check if DSH is responding (GET / returns 200) */
+	/** Check if DSH is responding (GET / returns 200) — uses Node http to bypass proxy */
 	async healthCheck(): Promise<boolean> {
-		try {
-			const resp = await request({
-				url: `http://localhost:${this.port}/`,
-				method: "GET",
+		return new Promise<boolean>((resolve) => {
+			const req = http.get(`http://127.0.0.1:${this.port}/`, (res) => {
+				res.resume();
+				res.on("end", () => {
+					const ok = res.statusCode === 200;
+					this.trigger(ok ? "health-ok" : "health-fail");
+					resolve(ok);
+				});
 			});
-			if (resp) {
-				this.trigger("health-ok");
-				return true;
-			}
-			this.trigger("health-fail");
-			return false;
-		} catch {
-			this.trigger("health-fail");
-			return false;
-		}
+			req.on("error", () => {
+				this.trigger("health-fail");
+				resolve(false);
+			});
+			req.setTimeout(3000, () => {
+				req.destroy();
+				this.trigger("health-fail");
+				resolve(false);
+			});
+		});
 	}
 
 	isRunning(): boolean {
